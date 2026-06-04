@@ -1,0 +1,6 @@
+AUDIO INPUT CHANGER - BUILT BY ANTHONY WITT (2026)
+Current default audio device: Speakers (Realtek(R) Audio)
+Switched audio output (speakers) to: Speakers (Realtek(R) Audio)
+No preferred 'Microphone Array' input device was found. Leaving current input device unchanged.
+
+Operation completed successfully.

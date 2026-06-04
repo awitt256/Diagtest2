@@ -1,0 +1,1 @@
+Get-WmiObject -namespace "root\dell\sysman" -class Dell_BIOSSettings | Select-Object AttributeName, CurrentValue, PossibleValues, Description | Format-Table -AutoSize | Out-File C:\temp\DellBIOSInfo.txt

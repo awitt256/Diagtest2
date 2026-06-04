@@ -1,0 +1,128 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260511155230
+Username: WINDOWS-TS2\Anthony
+RunAs User: WINDOWS-TS2\Anthony
+Configuration Name: 
+Machine: WINDOWS-TS2 (Microsoft Windows NT 10.0.26200.0)
+Host Application: powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\HPLENDELLDEV7.ps1
+Process ID: 35724
+PSVersion: 5.1.26100.8328
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8328
+BuildVersion: 10.0.26100.8328
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Detected manufacturer: HP
+
+===============================
+
+HP BIOS vs Device Manager Check
+===============================
+================
+
+System Info
+================
+System Serial: MXL0413V85
+System SKU: 2T2G9US#ABA
+System Model: HP ProDesk 600 G6 Desktop Mini PC
+System Name: WINDOWS-TS2
+BIOS Password: No
+=============
+
+Display
+=============
+Manufacturer: HPN
+Name: OMEN 27k
+Serial: CNC3152CGF
+Manufacture Year: 2023
+
+Manufacturer: HPN
+Name: HP 27h
+Serial: 3CM23403CH
+Manufacture Year: 2022
+
+Manufacturer: HPN
+Name: HP 27h
+Serial: 3CM4140KLJ
+Manufacture Year: 2024
+
+=============
+
+CPU Info
+=============
+Name: Intel(R) Core(TM) i7-10700T CPU @ 2.00GHz
+Manufacturer: GenuineIntel
+Max Clock Speed (MHz): 1992
+===============
+
+Hard Drives
+===============
+Model: SAMSUNG MZVL22T0HBLB-00BH1
+Size: 2 TB
+==============
+
+Memory
+==============
+Name: Hynix/Hyundai HMAA4GS6MJR8N-VK
+Size: 32 GB
+Name: Hynix/Hyundai HMAA4GS6AJR8N-XN
+Size: 32 GB
+=============
+
+GPU Info
+=============
+Name: Intel(R) UHD Graphics 630
+Video Memory: 1 GB
+
+==================
+
+Computrace Check
+==================
+PS>TerminatingError(Get-CimInstance): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Invalid namespace "
+PS>TerminatingError(Get-CimInstance): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Invalid class "
+PASS - No active OS-level Computrace indicators found.
+No Computrace findings reported.
+
+==================
+
+BIOS Version Check
+==================
+Windows BIOS Version: 02.25.00
+BCU BIOS Version:
+Version Match: Unknown
+
+=================================
+
+BIOS vs Device Manager Comparison
+=================================
+
+Feature      BIOS Device Manager
+-------      ---- --------------
+WWAN         No   No
+Fingerprint  No   No
+WLAN         Yes  Yes
+Touchscreen  No   No
+Camera       No   Yes
+Microphone   Yes  Yes
+NFC          No   No
+Smart Card   No   No
+KB Backlight No   No
+Privacy      No   No
+
+
+
+================
+
+BCU Output Files
+================
+BCU output file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\bcu-output.txt
+BCU stdout file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\bcu-stdout.txt
+BCU stderr file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\bcu-stderr.txt
+**********************
+Windows PowerShell transcript end
+End time: 20260511155240
+**********************

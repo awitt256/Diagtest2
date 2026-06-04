@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Touchpad Tester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: sans-serif; background: #f5f5f5; padding: 24px; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 16px; color: #222; }
+  .pad-wrap { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .click-btn {
+    height: 48px; border-radius: 8px;
+    border: 0.5px solid rgba(0,0,0,0.15);
+    font-size: 15px; font-weight: 500; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; position: relative; color: #444;
+    background: #e0e0e0;
+  }
+  .click-btn:active { filter: brightness(0.93); }
+  .touchpad {
+    flex: 1; min-height: 140px; border-radius: 12px;
+    border: 0.5px solid rgba(0,0,0,0.15);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; user-select: none; position: relative;
+    background: #e0e0e0;
+  }
+  .touchpad:active { filter: brightness(0.93); }
+  .count-badge {
+    position: absolute; bottom: 10px; right: 10px;
+    background: #222; color: #fff;
+    border-radius: 999px; min-width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 500; padding: 0 7px;
+  }
+  .btn-badge {
+    position: absolute; bottom: 8px; right: 10px;
+    background: #222; color: #fff;
+    border-radius: 999px; min-width: 26px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 500; padding: 0 6px;
+  }
+  .toggle-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .toggle-switch {
+    position: relative; width: 42px; height: 24px; cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: #ccc; border-radius: 999px;
+    transition: background 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: #3B6D11; }
+  .toggle-thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; transition: left 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle-switch input:checked ~ .toggle-thumb { left: 21px; }
+  .toggle-label { font-size: 14px; color: #666; cursor: pointer; }
+  .label-row {
+    display: flex; gap: 10px; font-size: 12px;
+    color: #888; margin-bottom: 4px;
+  }
+  .label-row span { flex: 1; text-align: center; }
+  .main-row { display: flex; gap: 10px; }
+  .reset-btn {
+    background: none; border: 0.5px solid #ccc;
+    border-radius: 8px; padding: 6px 14px;
+    font-size: 13px; cursor: pointer; color: #666;
+    margin-left: auto;
+  }
+  .reset-btn:hover { background: #eee; }
+</style>
+</head>
+<body>
+<h1>Touchpad Tester</h1>
+
+<div class="toggle-row">
+  <label class="toggle-switch" for="btnToggle">
+    <input type="checkbox" id="btnToggle">
+    <div class="toggle-track"></div>
+    <div class="toggle-thumb"></div>
+  </label>
+  <label class="toggle-label" for="btnToggle">Click buttons</label>
+  <button class="reset-btn" onclick="resetAll()">Reset</button>
+</div>
+
+<div class="label-row">
+  <span>Left click</span>
+  <span>Right click</span>
+</div>
+
+<div class="main-row">
+  <div class="pad-wrap">
+    <div class="click-btn" id="leftBtn" style="display:none;"
+      onclick="registerBtn('leftBtn','btnLeft')"
+      oncontextmenu="registerBtn('rightBtn','btnRight'); return false;">
+      Left click
+      <div class="btn-badge" id="btnLeft">0</div>
+    </div>
+    <div class="touchpad" id="leftPad"
+      onclick="registerPad('left')"
+      oncontextmenu="registerPad('right'); return false;">
+      <div class="count-badge" id="leftCount">0</div>
+    </div>
+  </div>
+  <div class="pad-wrap">
+    <div class="click-btn" id="rightBtn" style="display:none;"
+      onclick="registerBtn('rightBtn','btnRight')"
+      oncontextmenu="registerBtn('leftBtn','btnLeft'); return false;">
+      Right click
+      <div class="btn-badge" id="btnRight">0</div>
+    </div>
+    <div class="touchpad" id="rightPad"
+      onclick="registerPad('left')"
+      oncontextmenu="registerPad('right'); return false;">
+      <div class="count-badge" id="rightCount">0</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GREY = '#e0e0e0', GREEN = '#4cda4c', ORANGE = '#FF8C00';
+const padState = { left: { count: 0, color: GREY }, right: { count: 0, color: GREY } };
+const btnState = { leftBtn: { count: 0, color: GREY }, rightBtn: { count: 0, color: GREY } };
+
+function nextColor(c) { return (c === GREY || c === ORANGE) ? GREEN : ORANGE; }
+
+function registerPad(side) {
+  padState[side].count++;
+  padState[side].color = nextColor(padState[side].color);
+  document.getElementById(side + 'Pad').style.background = padState[side].color;
+  document.getElementById(side + 'Count').textContent = padState[side].count;
+}
+
+function registerBtn(btnId, badgeId) {
+  btnState[btnId].count++;
+  btnState[btnId].color = nextColor(btnState[btnId].color);
+  document.getElementById(btnId).style.background = btnState[btnId].color;
+  document.getElementById(badgeId).textContent = btnState[btnId].count;
+}
+
+function resetAll() {
+  ['left','right'].forEach(s => {
+    padState[s].count = 0; padState[s].color = GREY;
+    document.getElementById(s + 'Pad').style.background = GREY;
+    document.getElementById(s + 'Count').textContent = 0;
+  });
+  ['leftBtn','rightBtn'].forEach(b => {
+    btnState[b].count = 0; btnState[b].color = GREY;
+    document.getElementById(b).style.background = GREY;
+  });
+  document.getElementById('btnLeft').textContent = 0;
+  document.getElementById('btnRight').textContent = 0;
+}
+
+document.getElementById('btnToggle').addEventListener('change', function() {
+  const d = this.checked ? 'flex' : 'none';
+  document.getElementById('leftBtn').style.display = d;
+  document.getElementById('rightBtn').style.display = d;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260417134904
+Username: WINDOWS-BP149SK\Anthony
+RunAs User: WINDOWS-BP149SK\Anthony
+Configuration Name: 
+Machine: WINDOWS-BP149SK (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\HPLENDELLDEV6.ps1
+Process ID: 2280
+PSVersion: 5.1.26100.8115
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8115
+BuildVersion: 10.0.26100.8115
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Detected manufacturer: HP
+
+===============================
+
+HP BIOS vs Device Manager Check
+===============================
+================
+
+System Info
+================
+System Serial: 5CG1056N7H
+System SKU: 360W5UT#ABA
+System Model: HP EliteBook 840 G8 Notebook PC
+System Name: WINDOWS-BP149SK
+BIOS Password: No
+=============
+
+Display
+=============
+Manufacturer: IVO
+Name: Unknown
+Serial: 4
+Manufacture Year: 2019
+
+=============
+
+CPU Info
+=============
+Name: 11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz
+Manufacturer: GenuineIntel
+Max Clock Speed (MHz): 2995
+===============
+
+Hard Drives
+===============
+Model: MTFDKBA512TFH-1BC1AABHA
+Size: 512 GB
+==============
+
+Memory
+==============
+Name: Micron 16ATF4G64HZ-3G2E2
+Size: 32 GB
+Name: Hynix/Hyundai HMAA4GS6CJR8N-XN
+Size: 32 GB
+=============
+
+GPU Info
+=============
+Name: Intel(R) Iris(R) Xe Graphics
+Video Memory: 2 GB
+
+==================
+
+Computrace Check
+==================
+PS>TerminatingError(Get-CimInstance): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Invalid namespace "
+PS>TerminatingError(Get-CimInstance): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Invalid class "
+FAIL - Indicators found for Absolute/Computrace.
+BIOS: HP BIOS: Absolute Persistence Module Current State
+Details: CurrentValue: Inactive
+
+==================
+
+BIOS Version Check
+==================
+Windows BIOS Version: 01.23.00
+BCU BIOS Version:
+Version Match: Unknown
+
+=================================
+
+BIOS vs Device Manager Comparison
+=================================
+
+Feature      BIOS Device Manager
+-------      ---- --------------
+WWAN         No   No
+Fingerprint  Yes  Yes
+WLAN         Yes  Yes
+Touchscreen  No   No
+Camera       Yes  Yes
+Microphone   Yes  Yes
+NFC          Yes  Yes
+Smart Card   Yes  No
+KB Backlight Yes  Yes
+Sure View    Yes  No
+
+
+
+================
+
+BCU Output Files
+================
+BCU output file: D:\bcu-output.txt
+BCU stdout file: D:\bcu-stdout.txt
+BCU stderr file: D:\bcu-stderr.txt
+**********************
+Windows PowerShell transcript end
+End time: 20260417134918
+**********************

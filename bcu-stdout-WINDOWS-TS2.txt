@@ -1,0 +1,4 @@
+<BIOSCONFIG Version="" Computername="WINDOWS-TS2" Date="2026/05/11" Time="15:52:34" UTC="-5">
+	<SUCCESS msg="No errors occurred" />
+	<Information msg="BCU return value" real="0" translated="0" />
+</BIOSCONFIG>

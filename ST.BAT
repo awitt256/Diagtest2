@@ -1,0 +1,1 @@
+start "" "C:\Users\HP\Desktop\WIN TEST VERS 26\VLCPortable/VLC.EXE" "C:\Users\HP\Desktop\WIN TEST VERS 26\ST.MP3" --play-and-exit --fullscreen

@@ -1,0 +1,101 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260407123619
+Username: WINDOWS-TS2\Anthony
+RunAs User: WINDOWS-TS2\Anthony
+Configuration Name: 
+Machine: WINDOWS-TS2 (Microsoft Windows NT 10.0.26200.0)
+Host Application: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\Anthony\Desktop\win test 2.5.17\HPLENDELLDEV2.ps1
+Process ID: 40356
+PSVersion: 5.1.26100.8115
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8115
+BuildVersion: 10.0.26100.8115
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Detected manufacturer: HP
+
+===============================
+
+HP BIOS vs Device Manager Check
+===============================
+================
+
+System Info
+================
+System Serial: MXL0413V85
+System SKU: 2T2G9US#ABA
+System Model: HP ProDesk 600 G6 Desktop Mini PC
+System Name: WINDOWS-TS2
+BIOS Password: No
+=============
+
+CPU Info
+=============
+Name: Intel(R) Core(TM) i7-10700T CPU @ 2.00GHz
+Manufacturer: GenuineIntel
+Max Clock Speed (MHz): 1992
+===============
+
+Hard Drives
+===============
+Model: SAMSUNG MZVL22T0HBLB-00BH1
+Size: 2 TB
+==============
+
+Memory
+==============
+Name: Hynix/Hyundai HMAA4GS6MJR8N-VK
+Size: 32 GB
+Name: Hynix/Hyundai HMAA4GS6AJR8N-XN
+Size: 32 GB
+=============
+
+GPU Info
+=============
+Name: Intel(R) UHD Graphics 630
+Video Memory: 1 GB
+
+
+==================
+
+BIOS Version Check
+==================
+Windows BIOS Version: 02.24.00
+BCU BIOS Version:
+Version Match: Unknown
+
+=================================
+
+BIOS vs Device Manager Comparison
+=================================
+
+Feature      BIOS Device Manager
+-------      ---- --------------
+WWAN         No   No
+Fingerprint  No   No
+WLAN         Yes  Yes
+Touchscreen  No   No
+Camera       No   No
+Microphone   Yes  No
+NFC          No   No
+Smart Card   No   No
+KB Backlight No   No
+Sure View    No   No
+
+
+
+================
+
+BCU Output Files
+================
+BCU output file: C:\Users\Anthony\Desktop\win test 2.5.17\bcu-output.txt
+BCU stdout file: C:\Users\Anthony\Desktop\win test 2.5.17\bcu-stdout.txt
+BCU stderr file: C:\Users\Anthony\Desktop\win test 2.5.17\bcu-stderr.txt
+**********************
+Windows PowerShell transcript end
+End time: 20260407123624
+**********************
