@@ -2,7 +2,7 @@
 # Usage: .\AutoGitUpload.ps1
 
 param(
-    [string]$Action = "start",  # "start", "setup", "uploadall", or "stop"
+    [string]$Action = "start",  # "start", "setup", "uploadall", "timecheck", or "stop"
     [int]$DebounceSeconds = 5   # Wait 5 seconds after last change before committing
 )
 
@@ -67,6 +67,40 @@ function Commit-And-Push {
     }
     catch {
         Write-Host "✗ Error during commit/push: $_" -ForegroundColor Red
+    }
+}
+
+function Check-TimeAndCommit {
+    $currentTime = Get-Date
+    $hour = $currentTime.Hour
+    $minute = $currentTime.Minute
+    $totalMinutes = $hour * 60 + $minute
+    
+    # 3:30 PM = 15:30 = 930 minutes, 4:30 PM = 16:30 = 1010 minutes
+    $startTime = 15 * 60 + 30  # 930 minutes (3:30 PM)
+    $endTime = 16 * 60 + 30    # 1010 minutes (4:30 PM)
+    
+    # Check for new files first (untracked files)
+    $untrackedFiles = git ls-files --others --exclude-standard 2>&1
+    $hasNewFiles = -not [string]::IsNullOrWhiteSpace($untrackedFiles)
+    
+    if ($hasNewFiles) {
+        Write-Host "New files detected!" -ForegroundColor Magenta
+        Write-Host "Uploading new files immediately..." -ForegroundColor Yellow
+        Commit-And-Push "Auto-upload new files: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        return $true
+    }
+    
+    if ($totalMinutes -ge $startTime -and $totalMinutes -le $endTime) {
+        Write-Host "Current time: $(Get-Date -Format 'HH:mm:ss') - WITHIN 3:30 PM - 4:30 PM window" -ForegroundColor Green
+        Write-Host "Committing all changes..." -ForegroundColor Yellow
+        Commit-And-Push "Scheduled commit: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        return $true
+    }
+    else {
+        Write-Host "Current time: $(Get-Date -Format 'HH:mm:ss') - Outside 3:30 PM - 4:30 PM window" -ForegroundColor Yellow
+        Write-Host "No new files and outside scheduled time (3:30 PM - 4:30 PM)" -ForegroundColor Gray
+        return $false
     }
 }
 
@@ -151,6 +185,12 @@ switch ($Action.ToLower()) {
         }
     }
     
+    "timecheck" {
+        Initialize-GitRepo
+        Write-Host ""
+        Check-TimeAndCommit | Out-Null
+    }
+    
     "start" {
         if (-not $global:IsInitialized) {
             Initialize-GitRepo
@@ -167,14 +207,16 @@ switch ($Action.ToLower()) {
         Write-Host "Auto Git Upload Script" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Usage:" -ForegroundColor Yellow
-        Write-Host "  .\AutoGitUpload.ps1 -Action setup     # Initialize git repo (run once)" -ForegroundColor Gray
-        Write-Host "  .\AutoGitUpload.ps1 -Action uploadall # Upload all current files now" -ForegroundColor Gray
-        Write-Host "  .\AutoGitUpload.ps1 -Action start     # Start watching for changes" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action setup       # Initialize git repo (run once)" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action uploadall   # Upload all current files now" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action timecheck   # Commit all changes if within 3:30-4:30 PM" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action start       # Start watching for changes" -ForegroundColor Gray
         Write-Host "  .\AutoGitUpload.ps1 -Action start -DebounceSeconds 10  # Custom debounce delay" -ForegroundColor Gray
         Write-Host ""
         Write-Host "Examples:" -ForegroundColor Yellow
-        Write-Host "  .\AutoGitUpload.ps1 -Action setup     # One-time setup" -ForegroundColor Gray
-        Write-Host "  .\AutoGitUpload.ps1 -Action uploadall # Upload all files" -ForegroundColor Gray
-        Write-Host "  .\AutoGitUpload.ps1 -Action start     # Start auto-uploading" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action setup       # One-time setup" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action uploadall   # Upload all files" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action timecheck   # Check time and commit if 3:30-4:30 PM" -ForegroundColor Gray
+        Write-Host "  .\AutoGitUpload.ps1 -Action start       # Start auto-uploading on file changes" -ForegroundColor Gray
     }
 }

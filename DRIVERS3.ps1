@@ -5,16 +5,33 @@
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Script is not running as Administrator. Attempting to relaunch elevated..." -ForegroundColor Yellow
-    $scriptPath = $MyInvocation.MyCommand.Definition
+    
+    # Get script path - try multiple methods to ensure we get it
+    $scriptPath = $null
+    if ($PSScriptRoot) {
+        $scriptPath = Join-Path $PSScriptRoot (Split-Path -Leaf $MyInvocation.MyCommand.Path)
+    }
+    elseif ($MyInvocation.MyCommand.Path) {
+        $scriptPath = $MyInvocation.MyCommand.Path
+    }
+    elseif ($MyInvocation.MyCommand.Definition) {
+        $scriptPath = $MyInvocation.MyCommand.Definition
+    }
+    
+    if (-not $scriptPath -or -not (Test-Path $scriptPath)) {
+        Write-Host "ERROR: Could not determine script path for elevation. Script path: $scriptPath" -ForegroundColor Red
+        exit 1
+    }
+    
     $pwshCmd = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
-    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath)
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$scriptPath`"")
     try {
-        Start-Process -FilePath $pwshCmd -ArgumentList $argList -Verb RunAs -WindowStyle Normal
+        Start-Process -FilePath $pwshCmd -ArgumentList $argList -Verb RunAs -WindowStyle Normal -Wait
     }
     catch {
         Write-Host "Elevation cancelled or failed: $_" -ForegroundColor Red
     }
-    exit 1
+    exit 0
 }
 
 # --- Log file: all drivers downloaded and installed ---
@@ -88,16 +105,30 @@ try {
     $devicesWithIssues = @()
     $pnpDevices = Get-WmiObject Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 }
 
+    $checkForUpdates = $false
+    
     if ($pnpDevices.Count -eq 0) {
         Write-Host "No devices with missing drivers found." -ForegroundColor Green
-        Write-DriverLog "No devices with missing drivers found. Exiting." -NoConsole
-        exit 0
+        Write-DriverLog "No devices with missing drivers found." -NoConsole
+        
+        # Prompt user to check for driver updates
+        $checkUpdates = Read-Host "Do you still want to check for driver updates? (y/n)"
+        if ($checkUpdates -eq 'y' -or $checkUpdates -eq 'yes') {
+            Write-DriverLog "User chose to check for driver updates." -NoConsole
+            $checkForUpdates = $true
+        }
+        else {
+            Write-DriverLog "User chose not to check for driver updates. Exiting." -NoConsole
+            exit 0
+        }
     }
-
-    Write-Host "Found the following devices with missing/problematic drivers:" -ForegroundColor Yellow
-    foreach ($device in $pnpDevices) {
-        Write-Host "  - $($device.Name)" -ForegroundColor Cyan
-        $devicesWithIssues += $device
+    else {
+        Write-Host "Found the following devices with missing/problematic drivers:" -ForegroundColor Yellow
+        foreach ($device in $pnpDevices) {
+            Write-Host "  - $($device.Name)" -ForegroundColor Cyan
+            $devicesWithIssues += $device
+        }
+        $checkForUpdates = $true
     }
 
     Write-Host "`nSearching Windows Update for available driver updates..." -ForegroundColor Green
@@ -132,16 +163,16 @@ try {
             if ($category.Name -eq "Drivers") {
                 $isDriver = $true
             }
-            # Exclude if it contains other update types
-            if ($category.Name -match "Cumulative|Security|Preview|Service Pack|Software|Update Rollup") {
+            # Exclude if it contains other update types: Security, Cumulative, Rollup, Software, etc.
+            if ($category.Name -match "Cumulative|Security|Preview|Service Pack|Software|Update Rollup|Feature Update") {
                 $isOtherUpdate = $true
                 break
             }
         }
     
-        # Additional filter: Check title/description to exclude non-driver updates
+        # Additional filter: Check title/description to exclude non-driver updates (Security, Cumulative, Windows version, KB articles)
         $title = $update.Title
-        if ($title -match "Cumulative|Security|Preview|Rollup|Windows \d+ Update|Feature Update|KB\d+") {
+        if ($title -match "Security|Cumulative|Preview|Rollup|Windows \d+ Update|Feature Update|Version \d+|KB\d+ Security|Cumulative Update") {
             $isOtherUpdate = $true
         }
     
