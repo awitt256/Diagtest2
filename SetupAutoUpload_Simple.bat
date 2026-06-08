@@ -1,5 +1,5 @@
 @echo off
-REM Setup Auto Git Upload using schtasks (simplified, no password prompt)
+REM Setup Auto Git Upload - Runs Monday-Friday 8 AM - 4:30 PM every 5 minutes
 REM Run as Administrator
 
 title Setup Auto Git Upload Task
@@ -8,7 +8,6 @@ color 0A
 echo.
 echo ========================================
 echo   Setting up Auto Git Upload Task
-echo   (Every 5 minutes)
 echo ========================================
 echo.
 
@@ -42,13 +41,20 @@ schtasks /delete /tn "AutoGitUpload-Every5Minutes" /f >nul 2>&1
 echo Creating new scheduled task...
 echo.
 
-REM Create the task using schtasks (simplified - no password prompt)
-schtasks /create ^
-    /tn "AutoGitUpload-Every5Minutes" ^
-    /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%SCRIPT_PATH%\" -Action timecheck" ^
-    /sc minute ^
-    /mo 5 ^
-    /f
+REM Create a temporary PowerShell script file
+set TEMP_PS=%TEMP%\setup_task.ps1
+
+(
+    echo $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_PATH%" -Action timecheck'
+    echo $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 08:00:00 -RepetitionInterval ^(New-TimeSpan -Minutes 5^) -RepetitionDuration ^(New-TimeSpan -Hours 8 -Minutes 30^)
+    echo $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Highest
+    echo $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RunOnlyIfNetworkAvailable
+    echo Register-ScheduledTask -TaskName 'AutoGitUpload-Every5Minutes' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force ^| Out-Null
+    echo Write-Host 'Task created successfully!' -ForegroundColor Green
+) > "%TEMP_PS%"
+
+REM Run the PowerShell script
+powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMP_PS%"
 
 if %errorlevel% equ 0 (
     echo.
@@ -57,26 +63,30 @@ if %errorlevel% equ 0 (
     echo ========================================
     echo.
     echo Task created: AutoGitUpload-Every5Minutes
-    echo Frequency: Every 5 minutes
+    echo.
+    echo Schedule:
+    echo   - Days: Monday-Friday ONLY
+    echo   - Start: 8:00 AM
+    echo   - Stop: 4:30 PM
+    echo   - Frequency: Every 5 minutes
     echo.
     echo What it does:
-    echo   - Uploads NEW files immediately 24/7
-    echo   - Uploads modified files during 3:30-4:30 PM
-    echo   - Skips unchanged files outside time window
+    echo   - Uploads NEW files when detected
+    echo   - Uploads MODIFIED files when detected
+    echo   - Does NOT run on weekends or outside business hours
     echo.
     echo You can manage this task in:
     echo   Control Panel ^> System and Security ^> Task Scheduler
-    echo.
-    echo Or from PowerShell:
-    echo   Get-ScheduledTask -TaskName "AutoGitUpload-Every5Minutes"
     echo.
 ) else (
     echo.
     echo ERROR: Failed to create scheduled task
     echo Error code: %errorlevel%
-    echo Please try running this batch file as Administrator
     echo.
 )
+
+REM Clean up temp file
+del /f /q "%TEMP_PS%" >nul 2>&1
 
 echo.
 pause

@@ -18,10 +18,12 @@ try {
     
     Write-Host "Admin check passed." -ForegroundColor Green
     
-    # Source directory
-    $SourceDir = "C:\Users\Anthony\OneDrive - Close The Loop Inc\Documents\WinTest 3.06"
+    # Source directory - use the folder this script is located in
+    $SourceDir = $PSScriptRoot
+    $ExcludeFiles = @("Format-And-Copy-USB.bat", "Format-And-Copy-USB.ps1")
     
     Write-Host "Checking source directory: $SourceDir" -ForegroundColor Yellow
+    Write-Host "Files excluded from copy: $($ExcludeFiles -join ', ')" -ForegroundColor Yellow
     
     # Check if source directory exists
     if (-NOT (Test-Path $SourceDir)) {
@@ -94,7 +96,7 @@ try {
             # Copy files
             Write-Host "  Copying files from source to $Drive..." -ForegroundColor Yellow
             
-            $ItemsToCopy = Get-ChildItem -Path $SourceDir -ErrorAction SilentlyContinue
+            $ItemsToCopy = Get-ChildItem -Path $SourceDir -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $ExcludeFiles }
             
             if ($ItemsToCopy.Count -eq 0) {
                 Write-Host "  ERROR: No files found in source directory: $SourceDir" -ForegroundColor Red

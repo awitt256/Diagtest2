@@ -72,36 +72,52 @@ function Commit-And-Push {
 
 function Check-TimeAndCommit {
     $currentTime = Get-Date
+    $dayOfWeek = $currentTime.DayOfWeek
     $hour = $currentTime.Hour
     $minute = $currentTime.Minute
     $totalMinutes = $hour * 60 + $minute
     
-    # 3:30 PM = 15:30 = 930 minutes, 4:30 PM = 16:30 = 1010 minutes
-    $startTime = 15 * 60 + 30  # 930 minutes (3:30 PM)
-    $endTime = 16 * 60 + 30    # 1010 minutes (4:30 PM)
+    # Check if it's a weekday (Monday-Friday)
+    $isWeekday = $dayOfWeek -in @([System.DayOfWeek]::Monday, [System.DayOfWeek]::Tuesday, [System.DayOfWeek]::Wednesday, [System.DayOfWeek]::Thursday, [System.DayOfWeek]::Friday)
+    
+    if (-not $isWeekday) {
+        Write-Host "Current time: $(Get-Date -Format 'dddd HH:mm:ss') - Weekend, skipping upload" -ForegroundColor Yellow
+        return $false
+    }
+    
+    # 8:00 AM = 480 minutes, 4:30 PM = 1010 minutes
+    $startTime = 8 * 60      # 480 minutes (8:00 AM)
+    $endTime = 16 * 60 + 30  # 1010 minutes (4:30 PM)
+    
+    # Check if current time is within business hours (8 AM - 4:30 PM)
+    if ($totalMinutes -lt $startTime -or $totalMinutes -gt $endTime) {
+        Write-Host "Current time: $(Get-Date -Format 'HH:mm:ss') - Outside business hours (8:00 AM - 4:30 PM)" -ForegroundColor Yellow
+        return $false
+    }
     
     # Check for new files first (untracked files)
     $untrackedFiles = git ls-files --others --exclude-standard 2>&1
     $hasNewFiles = -not [string]::IsNullOrWhiteSpace($untrackedFiles)
     
+    # Check for modified files
+    $modifiedFiles = git diff --name-only 2>&1
+    $hasModifiedFiles = -not [string]::IsNullOrWhiteSpace($modifiedFiles)
+    
     if ($hasNewFiles) {
         Write-Host "New files detected!" -ForegroundColor Magenta
-        Write-Host "Uploading new files immediately..." -ForegroundColor Yellow
+        Write-Host "Uploading new files..." -ForegroundColor Yellow
         Commit-And-Push "Auto-upload new files: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         return $true
     }
     
-    if ($totalMinutes -ge $startTime -and $totalMinutes -le $endTime) {
-        Write-Host "Current time: $(Get-Date -Format 'HH:mm:ss') - WITHIN 3:30 PM - 4:30 PM window" -ForegroundColor Green
-        Write-Host "Committing all changes..." -ForegroundColor Yellow
-        Commit-And-Push "Scheduled commit: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    if ($hasModifiedFiles) {
+        Write-Host "Modified files detected at $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Green
+        Write-Host "Uploading changes..." -ForegroundColor Yellow
+        Commit-And-Push "Auto-upload changes: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         return $true
     }
-    else {
-        Write-Host "Current time: $(Get-Date -Format 'HH:mm:ss') - Outside 3:30 PM - 4:30 PM window" -ForegroundColor Yellow
-        Write-Host "No new files and outside scheduled time (3:30 PM - 4:30 PM)" -ForegroundColor Gray
-        return $false
-    }
+    
+    return $false
 }
 
 function Start-FileMonitoring {
