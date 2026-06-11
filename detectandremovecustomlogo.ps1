@@ -48,6 +48,49 @@ function Remove-InstalledModules {
     }
 }
 
+function Update-PowerShellGet {
+    # HP CMSL installs from the PowerShell Gallery, which needs a current
+    # NuGet provider and PowerShellGet. Update them before installing HPCMSL.
+    Write-Host ""
+    Write-Host "Updating PowerShellGet (required for HP CMSL)..." -ForegroundColor Cyan
+
+    # TLS 1.2 is required to reach the PowerShell Gallery on older systems.
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+
+    # NuGet package provider.
+    try {
+        $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+        if (-not $nuget -or $nuget.Version -lt [version]'2.8.5.201') {
+            Write-Host "  Installing/updating NuGet provider..." -ForegroundColor Yellow
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-Host "  Could not update NuGet provider: $_" -ForegroundColor DarkYellow
+    }
+
+    # Trust the PowerShell Gallery so installs don't prompt.
+    try {
+        if ((Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue).InstallationPolicy -ne 'Trusted') {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+        }
+    } catch {}
+
+    # Update PowerShellGet itself if a newer version exists.
+    try {
+        $current = (Get-Module -ListAvailable -Name PowerShellGet | Sort-Object Version -Descending | Select-Object -First 1).Version
+        $latest  = (Find-Module -Name PowerShellGet -ErrorAction Stop).Version
+        if (-not $current -or $current -lt $latest) {
+            Write-Host "  Updating PowerShellGet $current -> $latest ..." -ForegroundColor Yellow
+            Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+            Write-Host "  PowerShellGet updated (a new PowerShell session may be needed for it to fully load)." -ForegroundColor Green
+        } else {
+            Write-Host "  PowerShellGet is already current ($current)." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  Could not update PowerShellGet: $_" -ForegroundColor DarkYellow
+    }
+}
+
 try {
     # --- Check and install required modules ---
     Write-Host "Checking required modules..." -ForegroundColor Cyan
@@ -63,6 +106,9 @@ try {
     }
 
     if (-not $allPresent) {
+        # Make sure PowerShellGet / NuGet are current before installing HP CMSL.
+        Update-PowerShellGet
+
         Write-Host ""
         Write-Host "Installing missing modules..." -ForegroundColor Yellow
         foreach ($mod in $requiredModules) {
