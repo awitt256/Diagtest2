@@ -6,6 +6,10 @@
     prompts the user to remove it, then optionally restarts the PC.
 #>
 
+param(
+    [string]$LauncherPath = (Join-Path $PSScriptRoot 'REMOVELOGO.bat')
+)
+
 # --- Configuration ---
 # If you have a BIOS Password, put it here, otherwise leave it empty ''
 $biosPassword = ''
@@ -13,7 +17,8 @@ $biosPassword = ''
 # --- Auto-elevate to Administrator ---
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
-    Start-Process pwsh -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+    Start-Process $psExe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -LauncherPath `"$LauncherPath`"" -Verb RunAs
     return
 }
 
@@ -30,29 +35,58 @@ $requiredModules = @('HPCMSL')
 $installedByScript = @()
 
 function Remove-InstalledModules {
+    param(
+        [switch]$ForceAll
+    )
+
     Write-Host ""
-    Write-Host "Uninstalling HP CMSL Modules..." -ForegroundColor Yellow
-    if ($installedByScript.Count -gt 0) {
-        foreach ($mod in $installedByScript) {
+    Write-Host "Uninstalling HP CMSL library..." -ForegroundColor Yellow
+
+    if (-not $ForceAll -and $installedByScript.Count -eq 0) {
+        Write-Host "  No modules to remove (HPCMSL was already installed)." -ForegroundColor DarkGray
+        return
+    }
+
+    # Unload modules from this session before uninstalling from disk.
+    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+        Get-Module -Name $mod -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
+    }
+
+    $removedAny = $false
+    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+        if (-not (Get-Module -ListAvailable -Name $mod)) { continue }
+        try {
+            Uninstall-Module -Name $mod -AllVersions -Force -ErrorAction Stop
+            Write-Host "  Removed: $mod" -ForegroundColor DarkGray
+            $removedAny = $true
+        }
+        catch {
+            Write-Host "  Retrying $mod removal in a new session..." -ForegroundColor Yellow
+            $uninstallCmd = "Get-Module -Name '$mod' -ErrorAction SilentlyContinue | Remove-Module -Force; Uninstall-Module -Name '$mod' -AllVersions -Force -ErrorAction Stop"
             try {
-                Uninstall-Module -Name $mod -AllVersions -Force -ErrorAction Stop
+                & powershell.exe -NoProfile -Command $uninstallCmd
                 Write-Host "  Removed: $mod" -ForegroundColor DarkGray
+                $removedAny = $true
             }
             catch {
                 Write-Host "  Could not remove $mod : $_" -ForegroundColor DarkRed
             }
         }
-        Write-Host "Module cleanup complete." -ForegroundColor Green
-    } else {
-        Write-Host "  No modules to remove (HPCMSL was already installed)." -ForegroundColor DarkGray
+    }
+
+    if ($removedAny) {
+        Write-Host "HP CMSL cleanup complete." -ForegroundColor Green
     }
 }
 
 function Update-PowerShellGet {
     # HP CMSL installs from the PowerShell Gallery, which needs a current
     # NuGet provider and PowerShellGet. Update them before installing HPCMSL.
+    # Returns $true when PowerShellGet was upgraded (caller should restart).
     Write-Host ""
     Write-Host "Updating PowerShellGet (required for HP CMSL)..." -ForegroundColor Cyan
+
+    $psGetUpdated = $false
 
     # TLS 1.2 is required to reach the PowerShell Gallery on older systems.
     try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
@@ -82,13 +116,29 @@ function Update-PowerShellGet {
         if (-not $current -or $current -lt $latest) {
             Write-Host "  Updating PowerShellGet $current -> $latest ..." -ForegroundColor Yellow
             Install-Module -Name PowerShellGet -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
-            Write-Host "  PowerShellGet updated (a new PowerShell session may be needed for it to fully load)." -ForegroundColor Green
+            Write-Host "  PowerShellGet updated." -ForegroundColor Green
+            $psGetUpdated = $true
         } else {
             Write-Host "  PowerShellGet is already current ($current)." -ForegroundColor Green
         }
     } catch {
         Write-Host "  Could not update PowerShellGet: $_" -ForegroundColor DarkYellow
     }
+
+    return $psGetUpdated
+}
+
+function Restart-Launcher {
+    Write-Host ""
+    Write-Host "Restarting launcher to load updated PowerShellGet..." -ForegroundColor Yellow
+
+    if ($LauncherPath -and (Test-Path -LiteralPath $LauncherPath)) {
+        Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"$LauncherPath`"" -Wait
+        return
+    }
+
+    $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+    Start-Process -FilePath $psExe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -LauncherPath `"$LauncherPath`"" -Wait
 }
 
 try {
@@ -107,14 +157,17 @@ try {
 
     if (-not $allPresent) {
         # Make sure PowerShellGet / NuGet are current before installing HP CMSL.
-        Update-PowerShellGet
+        if (Update-PowerShellGet) {
+            Restart-Launcher
+            return
+        }
 
         Write-Host ""
         Write-Host "Installing missing modules..." -ForegroundColor Yellow
         foreach ($mod in $requiredModules) {
             if (-not (Get-Module -ListAvailable -Name $mod)) {
                 try {
-                    Install-Module -Name $mod -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+                    Install-Module -Name $mod -Scope CurrentUser -Force -AllowClobber -AcceptLicense -ErrorAction Stop
                     $installedByScript += $mod
                     Write-Host "  Installed: $mod" -ForegroundColor Green
                 }
@@ -173,7 +226,7 @@ try {
     }
 
     Write-Host "Logo reset command sent successfully." -ForegroundColor Green
-    Remove-InstalledModules
+    Remove-InstalledModules -ForceAll
 
     # --- Prompt to restart ---
     $restartAnswer = Read-Host "Do you want to restart your PC now? (y/n)"

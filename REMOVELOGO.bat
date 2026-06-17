@@ -12,4 +12,4 @@ exit /b
 
 :run
 :: Run the PowerShell script from the same folder as this BAT file
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0detectandremovecustomlogo.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0detectandremovecustomlogo.ps1" -LauncherPath "%~f0"

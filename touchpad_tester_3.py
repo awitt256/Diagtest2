@@ -33,13 +33,19 @@ def draw_rounded_rect(canvas, x1, y1, x2, y2, r, fill, outline):
 
 
 class TouchpadTester(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Touchpad Tester")
-        self.resizable(True, True)
-        self.configure(bg=BG)
-        self.geometry("520x400")
-        self.minsize(440, 360)
+    def __init__(self, embed_host=None):
+        if embed_host:
+            self.embed_host = embed_host
+            self.root = tk.Frame(embed_host)
+            self.root.pack(fill="both", expand=True)
+        else:
+            super().__init__()
+            self.title("Touchpad Tester")
+            self.resizable(True, True)
+            self.configure(bg=BG)
+            self.geometry("520x400")
+            self.minsize(440, 360)
+            self.root = self
 
         self.show_buttons = tk.BooleanVar(value=False)
         self.pad_state = {
@@ -53,7 +59,7 @@ class TouchpadTester(tk.Tk):
         self._build_ui()
 
     def _build_ui(self):
-        outer = tk.Frame(self, bg=BG, padx=16, pady=16)
+        outer = tk.Frame(self.root, bg=BG, padx=16, pady=16)
         outer.pack(fill="both", expand=True)
 
         # top row

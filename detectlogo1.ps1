@@ -27,61 +27,100 @@ Write-Host "   Built By Anthony Witt" -ForegroundColor DarkGray
 Write-Host ""
 
 # --- Required modules ---
+# HP.Private must be installed (with license accepted) before HPCMSL.
+$cmslModules = @('HP.Private', 'HPCMSL')
 $requiredModules = @('HPCMSL')
 $installedByScript = @()
 
 function Remove-InstalledModules {
+    param(
+        [switch]$ForceAll
+    )
+
     Write-Host ""
-    Write-Host "Uninstalling HP CMSL Modules..." -ForegroundColor Yellow
-    if ($installedByScript.Count -gt 0) {
-        foreach ($mod in $installedByScript) {
+    Write-Host "Uninstalling HP CMSL library..." -ForegroundColor Yellow
+
+    if (-not $ForceAll -and $installedByScript.Count -eq 0) {
+        Write-Host "  No modules to remove (HPCMSL was already installed)." -ForegroundColor DarkGray
+        return
+    }
+
+    # Unload modules from this session before uninstalling from disk.
+    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+        Get-Module -Name $mod -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
+    }
+
+    $removedAny = $false
+    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+        if (-not (Get-Module -ListAvailable -Name $mod)) { continue }
+        try {
+            Uninstall-Module -Name $mod -AllVersions -Force -ErrorAction Stop
+            Write-Host "  Removed: $mod" -ForegroundColor DarkGray
+            $removedAny = $true
+        }
+        catch {
+            Write-Host "  Retrying $mod removal in a new session..." -ForegroundColor Yellow
+            $uninstallCmd = "Get-Module -Name '$mod' -ErrorAction SilentlyContinue | Remove-Module -Force; Uninstall-Module -Name '$mod' -AllVersions -Force -ErrorAction Stop"
             try {
-                Uninstall-Module -Name $mod -AllVersions -Force -ErrorAction Stop
+                & powershell.exe -NoProfile -Command $uninstallCmd
                 Write-Host "  Removed: $mod" -ForegroundColor DarkGray
+                $removedAny = $true
             }
             catch {
                 Write-Host "  Could not remove $mod : $_" -ForegroundColor DarkRed
             }
         }
-        Write-Host "Module cleanup complete." -ForegroundColor Green
-    } else {
-        Write-Host "  No modules to remove (HPCMSL was already installed)." -ForegroundColor DarkGray
+    }
+
+    if ($removedAny) {
+        Write-Host "HP CMSL cleanup complete." -ForegroundColor Green
+    }
+}
+
+function Update-PowerShellGet {
+    Write-Host ""
+    Write-Host "Updating PowerShellGet (required for HP CMSL)..." -ForegroundColor Cyan
+
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+
+    try {
+        $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+        if (-not $nuget -or $nuget.Version -lt [version]'2.8.5.201') {
+            Write-Host "  Installing/updating NuGet provider..." -ForegroundColor Yellow
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope AllUsers -Force -Confirm:$false -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-Host "  Could not update NuGet provider: $_" -ForegroundColor DarkYellow
+    }
+
+    try {
+        $gallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+        if (-not $gallery) {
+            Register-PSRepository -Default -InstallationPolicy Trusted -ErrorAction Stop
+        } elseif ($gallery.InstallationPolicy -ne 'Trusted') {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction Stop
+        }
+    } catch {}
+
+    try {
+        $current = (Get-Module -ListAvailable -Name PowerShellGet | Sort-Object Version -Descending | Select-Object -First 1).Version
+        $latest  = (Find-Module -Name PowerShellGet -ErrorAction Stop).Version
+        if (-not $current -or $current -lt $latest) {
+            Write-Host "  Updating PowerShellGet $current -> $latest ..." -ForegroundColor Yellow
+            Install-Module -Name PowerShellGet -Scope AllUsers -Force -AllowClobber -ErrorAction Stop
+            Write-Host "  PowerShellGet updated." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  Could not update PowerShellGet: $_" -ForegroundColor DarkYellow
     }
 }
 
 try {
-    # --- Ensure NuGet provider is installed ---
-    Write-Host "Checking NuGet package provider..." -ForegroundColor Cyan
-    $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-    if (-not $nuget -or $nuget.Version -lt [Version]'2.8.5.201') {
-        Write-Host "  [MISSING] NuGet provider - Installing..." -ForegroundColor Yellow
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope AllUsers -Force -Confirm:$false | Out-Null
-        Write-Host "  [OK] NuGet provider installed." -ForegroundColor Green
-    } else {
-        Write-Host "  [OK] NuGet provider" -ForegroundColor Green
-    }
-
-    # --- Ensure PSGallery is trusted ---
-    Write-Host "Checking PSGallery trust..." -ForegroundColor Cyan
-    $gallery = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
-    if (-not $gallery) {
-        Write-Host "  [MISSING] PSGallery not registered - Registering..." -ForegroundColor Yellow
-        Register-PSRepository -Default -InstallationPolicy Trusted
-        Write-Host "  [OK] PSGallery registered and trusted." -ForegroundColor Green
-    } elseif ($gallery.InstallationPolicy -ne 'Trusted') {
-        Write-Host "  [UNTRUSTED] PSGallery - Setting to Trusted..." -ForegroundColor Yellow
-        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-        Write-Host "  [OK] PSGallery is now trusted." -ForegroundColor Green
-    } else {
-        Write-Host "  [OK] PSGallery is trusted." -ForegroundColor Green
-    }
-    Write-Host ""
-
     # --- Check and install required modules ---
     Write-Host "Checking required modules..." -ForegroundColor Cyan
     $allPresent = $true
 
-    foreach ($mod in $requiredModules) {
+    foreach ($mod in $cmslModules) {
         if (Get-Module -ListAvailable -Name $mod) {
             Write-Host "  [OK] $mod" -ForegroundColor Green
         } else {
@@ -91,20 +130,21 @@ try {
     }
 
     if (-not $allPresent) {
+        Update-PowerShellGet
+
         Write-Host ""
-        Write-Host "Installing missing modules..." -ForegroundColor Yellow
-        foreach ($mod in $requiredModules) {
-            if (-not (Get-Module -ListAvailable -Name $mod)) {
-                try {
-                    Install-Module -Name $mod -Scope AllUsers -Force -AllowClobber -Confirm:$false -ErrorAction Stop
-                    $installedByScript += $mod
-                    Write-Host "  Installed: $mod" -ForegroundColor Green
-                }
-                catch {
-                    Write-Host "  Failed to install ${mod}: $_" -ForegroundColor Red
-                    Read-Host "Press Enter to exit"
-                    return
-                }
+        Write-Host "Installing missing modules (accepting HP license)..." -ForegroundColor Yellow
+        foreach ($mod in $cmslModules) {
+            if (Get-Module -ListAvailable -Name $mod) { continue }
+            try {
+                Install-Module -Name $mod -Scope AllUsers -Force -AllowClobber -AcceptLicense -Confirm:$false -ErrorAction Stop
+                $installedByScript += $mod
+                Write-Host "  Installed: $mod" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "  Failed to install ${mod}: $_" -ForegroundColor Red
+                Read-Host "Press Enter to exit"
+                return
             }
         }
     }
@@ -141,6 +181,7 @@ try {
 
     if ($removeAnswer -notmatch '^[Yy]') {
         Write-Host "No changes made." -ForegroundColor Gray
+        Remove-InstalledModules
         Read-Host "Press Enter to exit"
         return
     }
@@ -155,7 +196,7 @@ try {
     }
 
     Write-Host "Logo reset command sent successfully." -ForegroundColor Green
-    Remove-InstalledModules
+    Remove-InstalledModules -ForceAll
 
     # --- Prompt to restart ---
     $restartAnswer = Read-Host "Do you want to restart your PC now? (y/n)"
