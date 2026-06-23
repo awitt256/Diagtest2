@@ -3875,15 +3875,12 @@ def show_hardware_test_screen():
 
     # Run button removed; use header ⟳ to trigger system info
 
-    comp_network_row = ctk.CTkFrame(body, fg_color="transparent")
-    comp_network_row.pack(fill="x", padx=0, pady=0)
-
     # ══════════════════════════════════════════════════════════════════
     # 3. FORM CARD (replaces Components — serial & SKU entry)
     # ══════════════════════════════════════════════════════════════════
-    comp_card = card(comp_network_row, "📋  Form", track_key="comp")
+    comp_card = card(body, "📋  Form", track_key="comp")
     try:
-        comp_card.pack_configure(side="left", fill="x", expand=True, anchor="n", padx=(14, 7), pady=8)
+        comp_card.pack_configure(fill="x", padx=14, pady=8)
     except Exception:
         pass
     try:
@@ -4311,9 +4308,9 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     # 3B. NETWORK ADAPTERS INFO CARD
     # ══════════════════════════════════════════════════════════════════
-    net_card = card(comp_network_row, "📶  Network Adapters", track_key="net")
+    net_card = card(body, "📶  Network Adapters", track_key="net")
     try:
-        net_card.pack_configure(side="left", fill="both", expand=True, padx=(7, 14), pady=8)
+        net_card.pack_configure(fill="x", padx=14, pady=8)
     except Exception:
         pass
     try:
