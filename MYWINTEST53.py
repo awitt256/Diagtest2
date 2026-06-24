@@ -2294,7 +2294,7 @@ def show_hardware_test_screen():
     top_bar.pack_propagate(False)
     ctk.CTkLabel(
         top_bar,
-        text="Hardware Test Suite — Revision 0.46  NEW BATTERY MODULE VARIOUS COLOR AND MODULE TWEAKS ADDED SPANISH OPTION  ",
+        text="Hardware Test Suite — Revision 0.53  GO A FEW NEW MODULES WORKING  ",
         font=ctk.CTkFont(size=18, weight="bold"),
         text_color=theme_value("title"),
     ).pack(side="left", padx=18, pady=8)
