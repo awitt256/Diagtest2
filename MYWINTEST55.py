@@ -1598,8 +1598,8 @@ def start_speaker_playback(on_finished, loop=False):
 def run_powershell(command, timeout=60):
     try:
         result = subprocess.run([
-            "powershell", "-NoProfile", "-Command", command
-        ], capture_output=True, text=True, shell=False, timeout=timeout)
+            "powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command
+        ], capture_output=True, text=True, shell=False, timeout=timeout, creationflags=0x08000000)
     except Exception as e:
         return f"Error: {e}"
     output = (result.stdout or "").strip()
@@ -1665,7 +1665,7 @@ def widget_exists(widget):
 
 def run_process_capture(args, shell=False):
     result = subprocess.run(
-        args,
+        args, creationflags=0x08000000,
         capture_output=True,
         text=True,
         shell=shell
@@ -1695,8 +1695,8 @@ BATTERY_STATUS_MAP = {
 
 def _run_powershell_json(command):
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-        capture_output=True, text=True, timeout=60,
+        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", command],
+        capture_output=True, text=True, timeout=60, creationflags=0x08000000
     )
     if result.returncode != 0:
         error_text = (result.stderr or result.stdout or "").strip()
@@ -1814,12 +1814,6 @@ $wifiAdapters = $allAdapters | Where-Object {
     $_.InterfaceDescription -match 'Wireless|Wi-Fi|802\.11|WLAN' -or
     $_.Name -match 'Wi-Fi|Wireless|WLAN'
 }
-
-$ethernetAdapters = $allAdapters | Where-Object {
-    $_.InterfaceDescription -notmatch 'Wireless|Wi-Fi|802\.11|WLAN|Bluetooth' -and
-    $_.Name -notmatch 'Wi-Fi|Wireless|WLAN|Bluetooth'
-}
-
 function Convert-AdapterData {
     param([array]$Adapters)
 
@@ -1845,14 +1839,12 @@ function Convert-AdapterData {
 
 [pscustomobject]@{
     WifiAdapters     = @(Convert-AdapterData -Adapters $wifiAdapters)
-    EthernetAdapters = @(Convert-AdapterData -Adapters $ethernetAdapters)
 } | ConvertTo-Json -Compress -Depth 4
 """
 
     data = _run_powershell_json(command) or {}
     return {
         "wifi": _ensure_list(data.get("WifiAdapters")),
-        "ethernet": _ensure_list(data.get("EthernetAdapters")),
     }
 
 
@@ -4453,7 +4445,6 @@ def show_hardware_test_screen():
         }
 
     net_sections["wifi"] = _make_net_section(net_section_row, "Wi-Fi Adapters")
-    net_sections["ethernet"] = _make_net_section(net_section_row, "Ethernet Adapters")
 
     # ── WiFi Networks Section (Available Networks List) ──
     wifi_networks_frame = _register_ctk_frame(
@@ -4682,23 +4673,20 @@ def show_hardware_test_screen():
         try:
             data = _get_network_adapter_data()
             wifi_adapter = data.get("wifi", [None])[0] if data.get("wifi") else None
-            ethernet_adapter = data.get("ethernet", [None])[0] if data.get("ethernet") else None
 
             def _apply():
                 if not widget_exists(net_card):
                     return
 
                 wifi_count = len(data.get("wifi", []))
-                ethernet_count = len(data.get("ethernet", []))
-                total_count = wifi_count + ethernet_count
+                total_count = wifi_count
 
                 net_status_lbl.configure(
-                    text=f"Detected {wifi_count} Wi-Fi / {ethernet_count} Ethernet adapter(s)",
+                    text=f"Detected {wifi_count} Wi-Fi adapter(s)",
                     text_color="#9fb3c8"
                 )
 
                 _set_net_section(net_sections["wifi"], wifi_adapter)
-                _set_net_section(net_sections["ethernet"], ethernet_adapter)
 
                 # Scan for available WiFi networks
                 if wifi_count > 0:
