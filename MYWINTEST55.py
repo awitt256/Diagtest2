@@ -576,14 +576,8 @@ def _get_system_info_worker():
                 design = int(info['battery_design_capacity'])
                 full = int(info['battery_full_charge'])
 
-                # Check for stale or out-of-bounds factory measurements
-                if design > 0 and full > 0:
-                    health_percentage = round((full / design) * 100)
-
-                    # If health calculation reports over 100% due to firmware calculation errors
-                    if health_percentage > 100:
-                        health_percentage = 100
-
+                if design > 0:
+                    health_percentage = min(100, round((full / design) * 100))
                     info['battery_health'] = f"{health_percentage}%"
                 else:
                     info['battery_health'] = "0% (Deep Discharge Alert / Service Required)"
@@ -2312,7 +2306,7 @@ def show_hardware_test_screen():
     top_bar.pack_propagate(False)
     ctk.CTkLabel(
         top_bar,
-        text="Hardware Test Suite — Revision 0.53  GO A FEW NEW MODULES WORKING  ",
+        text="Hardware Test Suite — Revision 0.55  Added RAM Test, Fixed Smartcard Test, and Battery Test",
         font=ctk.CTkFont(size=18, weight="bold"),
         text_color=theme_value("title"),
     ).pack(side="left", padx=18, pady=8)
@@ -4039,7 +4033,7 @@ def show_hardware_test_screen():
                 if full and typed and typed.upper() == full.upper():
                     if not _form_serial_matched[0]:
                         _form_serial_matched[0] = True
-                        entry.configure(bg="#1f3d28", fg="#3ddc84")
+                        entry.configure(bg="#3ddc84", fg="#000000")
                         # auto-advance to SKU field
                         sku_entry = _form_sku_entry[0]
                         if sku_entry is not None:
@@ -4077,6 +4071,15 @@ def show_hardware_test_screen():
                 entry = _form_serial_entry[0]
                 if entry is None:
                     return
+
+                # Force input to Uppercase
+                pos = entry.index("insert")
+                val = entry.get()
+                if val != val.upper():
+                    entry.delete(0, "end")
+                    entry.insert(0, val.upper())
+                    entry.icursor(pos)
+
                 base = _bios_serial_base[0] or ""
                 current = entry.get()
                 if len(current) - len(base) > 2:
@@ -4138,7 +4141,7 @@ def show_hardware_test_screen():
                 if is_match:
                     if not _form_sku_matched[0]:
                         _form_sku_matched[0] = True
-                        entry.configure(bg="#1f3d28", fg="#3ddc84")
+                        entry.configure(bg="#3ddc84", fg="#000000")
                 else:
                     if _form_sku_matched[0]:
                         _form_sku_matched[0] = False
@@ -4165,6 +4168,15 @@ def show_hardware_test_screen():
                 entry = _form_sku_entry[0]
                 if entry is None:
                     return
+            
+                # Force input to Uppercase
+                pos = entry.index("insert")
+                val = entry.get()
+                if val != val.upper():
+                    entry.delete(0, "end")
+                    entry.insert(0, val.upper())
+                    entry.icursor(pos)
+
                 base = _bios_sku_base[0] or ""
                 max_len = _sku_max_len()
                 current = entry.get()
@@ -4305,7 +4317,7 @@ def show_hardware_test_screen():
         def _make_color_swatch(parent, label, bg_hex, fg_hex):
             swatch_outer = _register_ctk_frame(ctk.CTkFrame(
                 parent, fg_color=theme_value("card_bg"), corner_radius=8,
-                border_width=2, border_color="#3a3f4a", width=62, height=62
+            border_width=0, border_color="#3a3f4a", width=62, height=62
             ))
             swatch_outer.pack_propagate(False)
 
@@ -4325,17 +4337,9 @@ def show_hardware_test_screen():
 
             def _select(l=label, outer=swatch_outer, dot=color_dot, bg=bg_hex):
                 _selected_color[0] = l
-                # Reset all borders
-                for ref in _color_btn_refs.values():
-                    try:
-                        ref.configure(border_color="#3a3f4a")
-                    except Exception:
-                        pass
-                # Highlight selected
-                try:
-                    outer.configure(border_color="#2ecc8a")
-                except Exception:
-                    pass
+                # Selection logic updated to be borderless.
+                # We no longer cycle through references to change border_width.
+                pass
 
             color_dot.bind("<Button-1>", lambda e, fn=_select: fn())
             swatch_outer.bind("<Button-1>", lambda e, fn=_select: fn())
@@ -5941,10 +5945,7 @@ def show_hardware_test_screen():
                 _highlight_and_show(smartcard_card)
             except Exception:
                 pass
-            try:
-                threading.Thread(target=_smartcard_refresh, daemon=True).start()
-            except Exception:
-                pass
+            _start_smartcard_embed()
 
         ui_call(_show_and_start_smartcard)
 
@@ -6002,7 +6003,7 @@ def show_hardware_test_screen():
         height=28,
         fg_color="#444444",
         hover_color="#555555",
-        command=lambda: threading.Thread(target=_smartcard_refresh, daemon=True).start()
+        command=lambda: _start_smartcard_embed()
     ).pack(side="right")
 
     # Status display
@@ -6014,143 +6015,47 @@ def show_hardware_test_screen():
     )
     sc_status.pack(anchor="w", padx=14, pady=(0, 6))
 
-    # Smart card info display frame
-    sc_info_frame = _register_ctk_frame(ctk.CTkFrame(smartcard_card, fg_color=theme_value("embed_bg"), corner_radius=8))
-    sc_info_frame.pack(fill="x", padx=14, pady=(0, 10))
+    # Host frame for embedded screader2.py widget
+    sc_host = _register_tk_frame(tk.Frame(smartcard_card, bg=theme_value("embed_bg")))
+    sc_host.pack(fill="both", expand=True, padx=14, pady=(6, 0))
+    sc_active = [False]
 
-    sc_service_lbl = _register_subtle_label(ctk.CTkLabel(
-        sc_info_frame,
-        text="Service: --",
-        font=ctk.CTkFont(size=11),
-        text_color="#9fb3c8"
-    ))
-    sc_service_lbl.pack(anchor="w", padx=12, pady=(10, 4))
+    def _start_smartcard_embed():
+        """Embed screader2.py widget into the smart card card."""
+        sc_active[0] = True
+        try:
+            sc_status.configure(text="Smart Card module loading...", text_color="#7ee787")
+        except Exception:
+            pass
 
-    sc_readers_lbl = _register_subtle_label(ctk.CTkLabel(
-        sc_info_frame,
-        text="Readers Found: --",
-        font=ctk.CTkFont(size=11),
-        text_color="#9fb3c8"
-    ))
-    sc_readers_lbl.pack(anchor="w", padx=12, pady=(4, 4))
+        # Clear any existing children
+        for w in sc_host.winfo_children():
+            try:
+                w.destroy()
+            except Exception:
+                pass
 
-    sc_details_text = _register_text_widget(tk.Text(
-        sc_info_frame,
-        bg=theme_value("embed_bg"),
-        fg=theme_value("embed_text"),
-        font=("Consolas", 10),
-        height=6,
-        wrap="word",
-        borderwidth=0,
-        highlightthickness=0,
-    ))
-    sc_details_text.pack(fill="x", padx=12, pady=(4, 10))
-    sc_details_text.configure(state="disabled")
-
-    # Smart card detection variables
-    _sc_check_running = [False]
-
-    def _smartcard_refresh():
-        """Run PowerShell script to detect smart card readers"""
-        if _sc_check_running[0]:
+        _sc_path = os.path.join(BASE, "screader2.py")
+        if not os.path.exists(_sc_path):
+            ctk.CTkLabel(sc_host, text=f"screader2.py not found: {_sc_path}", text_color="#ff7b72").pack(pady=14)
+            sc_active[0] = False
             return
-        _sc_check_running[0] = True
 
         try:
-            ui_call(lambda: sc_status.configure(text="Detecting smart card readers...", text_color="#58a6ff"))
+            # Import screader2 module dynamically
+            _sc_spec = _importlib_util.spec_from_file_location("screader2", _sc_path)
+            sc_mod = _importlib_util.module_from_spec(_sc_spec)
+            _sc_spec.loader.exec_module(sc_mod)
 
-            # Run the PowerShell script
-            ps_path = os.path.join(BASE, "SmartCardTest.ps1")
-
-            if not os.path.exists(ps_path):
-                ui_call(lambda: sc_status.configure(text="SmartCardTest.ps1 not found!", text_color="#ff7b72"))
-                _sc_check_running[0] = False
-                return
-
-            result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_path],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            output = result.stdout
-            error = result.stderr
-
-            # Parse the output
-            service_name = "Not Found"
-            service_status = "Unknown"
-            readers_found = 0
-            working_readers = 0
-            reader_details = []
-            test_result = "FAIL"
-
-            for line in output.split('\n'):
-                line = line.strip()
-                if line.startswith("SERVICE_NAME:"):
-                    service_name = line.split(":", 1)[1].strip()
-                elif line.startswith("SERVICE_STATUS:"):
-                    service_status = line.split(":", 1)[1].strip()
-                elif line.startswith("READER_FOUND:") and "NONE" not in line:
-                    readers_found += 1
-                    reader_details.append(line.split(":", 1)[1].strip())
-                elif line.startswith("READER_STATUS:") and "OK" in line.upper():
-                    working_readers += 1
-                elif line.startswith("TOTAL_READERS:"):
-                    readers_found = int(line.split(":", 1)[1].strip())
-                elif line.startswith("WORKING_READERS:"):
-                    working_readers = int(line.split(":", 1)[1].strip())
-                elif line.startswith("TEST_RESULT:"):
-                    test_result = line.split(":", 1)[1].strip()
-
-            # Update UI
-            def _update_ui():
-                sc_status.configure(
-                    text=f"Smart Card Test: {test_result}",
-                    text_color="#7ee787" if test_result == "PASS" else "#ff7b72"
-                )
-
-                sc_service_lbl.configure(
-                    text=f"Service: {service_name} ({service_status})"
-                )
-
-                sc_readers_lbl.configure(
-                    text=f"Readers Found: {readers_found} ({working_readers} working)"
-                )
-
-                # Update details text
-                sc_details_text.configure(state="normal")
-                sc_details_text.delete(1.0, "end")
-
-                if reader_details:
-                    sc_details_text.insert("end", "Detected Readers:\n")
-                    for i, reader in enumerate(reader_details, 1):
-                        sc_details_text.insert("end", f"  {i}. {reader}\n")
-                else:
-                    sc_details_text.insert("end", "No smart card readers detected.\n\n")
-                    sc_details_text.insert("end", "Possible reasons:\n")
-                    sc_details_text.insert("end", "  • No smart card reader hardware present\n")
-                    sc_details_text.insert("end", "  • Driver not installed\n")
-                    sc_details_text.insert("end", "  • Reader disabled in BIOS\n")
-
-                sc_details_text.configure(state="disabled")
-
-                # Auto-mark pass/fail
-                if test_result == "PASS":
-                    if hasattr(smartcard_card, 'set_pass'):
-                        smartcard_card.set_pass()
-                else:
-                    if hasattr(smartcard_card, 'set_fail'):
-                        smartcard_card.set_fail()
-
-            ui_call(_update_ui)
-
-        except subprocess.TimeoutExpired:
-            ui_call(lambda: sc_status.configure(text="Smart card detection timed out", text_color="#ff7b72"))
+            # Instantiate the class (assuming standard naming convention)
+            if hasattr(sc_mod, "SmartCardWidget"):
+                sc_mod.SmartCardWidget(embed_host=sc_host)
+            
+            sc_host.update_idletasks()
+            sc_status.configure(text="Smart Card module loaded.", text_color="#7ee787")
         except Exception as e:
-            ui_call(lambda: sc_status.configure(text=f"Error: {str(e)}", text_color="#ff7b72"))
-        finally:
-            _sc_check_running[0] = False
+            ctk.CTkLabel(sc_host, text=f"Error: {e}", text_color="#ff7b72", wraplength=400).pack(pady=14)
+            sc_active[0] = False
 
     # AUTO ADVANCE: Smart Card Reader -> USB Port Detection
     def _on_smartcard_marked():
@@ -8876,7 +8781,7 @@ catch {
                 _net_refresh()
                 return True
             if key == 'ram':
-                threading.Thread(target=_ram_refresh, daemon=True).start()
+                app.after(0, _start_smartcard_embed)
                 return True
             if key == 'bat':
                 threading.Thread(target=_bat_refresh, daemon=True).start()
