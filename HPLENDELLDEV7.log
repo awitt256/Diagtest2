@@ -1,12 +1,12 @@
 ﻿**********************
 Windows PowerShell transcript start
-Start time: 20260625182411
+Start time: 20260626125815
 Username: WINDOWS-TS2\Anthony
 RunAs User: WINDOWS-TS2\Anthony
 Configuration Name: 
 Machine: WINDOWS-TS2 (Microsoft Windows NT 10.0.26200.0)
-Host Application: powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\HPLENDELLDEV7.ps1
-Process ID: 46272
+Host Application: powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\HPLENDELLDEV7.ps1
+Process ID: 43464
 PSVersion: 5.1.26100.8655
 PSEdition: Desktop
 PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8655
@@ -124,5 +124,5 @@ BCU stdout file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 
 BCU stderr file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\bcu-stderr.txt
 **********************
 Windows PowerShell transcript end
-End time: 20260625182418
+End time: 20260626125829
 **********************

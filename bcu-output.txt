@@ -2,7 +2,7 @@ BIOSConfig 1.0
 ;
 ;     Originally created by BIOS Configuration Utility
 ;     Version: 4.0.32.1
-;     Date="2026/06/25" Time="18:24:15" UTC="-5"
+;     Date="2026/06/26" Time="12:58:26" UTC="-5"
 ;
 ;     Found 230 settings
 ;
