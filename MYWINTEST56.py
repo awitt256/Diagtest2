@@ -466,6 +466,7 @@ def _get_system_info_worker():
         'hostname': socket.gethostname(),
     }
 
+<<<<<<< HEAD
     # Consolidated PowerShell query for faster background gathering
     ps_query = r"""
     $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -516,12 +517,154 @@ def _get_system_info_worker():
         pass
 
     # (Re-calculate health and AC status logic follows...)
+=======
+    # Try to get more detailed info via WMI/subprocess
+    try:
+        # Get CPU info
+        result = subprocess.run(['wmic', 'cpu', 'get', 'Name', '/value'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if 'Name=' in line:
+                    info['cpu_model'] = line.split('=', 1)[1].strip()
+                    break
+    except Exception:
+        info['cpu_model'] = info['processor']
+
+    try:
+        # Get total memory
+        result = subprocess.run(['wmic', 'computersystem', 'get', 'TotalPhysicalMemory', '/value'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if 'TotalPhysicalMemory=' in line:
+                    mem_bytes = int(line.split('=', 1)[1].strip())
+                    info['memory_gb'] = round(mem_bytes / (1024 ** 3), 1)
+                    break
+    except Exception:
+        info['memory_gb'] = 'N/A'
+
+    try:
+        # Get disk info
+        result = subprocess.run(['wmic', 'diskdrive', 'get', 'Size,Model', '/value'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            lines = result.stdout.strip().split('\n')
+            for i, line in enumerate(lines):
+                if 'Model=' in line:
+                    info['storage_model'] = line.split('=', 1)[1].strip()
+                if 'Size=' in line:
+                    size_bytes = int(line.split('=', 1)[1].strip())
+                    info['storage_gb'] = round(size_bytes / (1024 ** 3), 0)
+                    break
+    except Exception:
+        info['storage_model'] = 'N/A'
+        info['storage_gb'] = 'N/A'
+
+    try:
+        # Get GPU info
+        result = subprocess.run(['wmic', 'path', 'win32_videocontroller', 'get', 'Name', '/value'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if 'Name=' in line:
+                    info['gpu'] = line.split('=', 1)[1].strip()
+                    break
+    except Exception:
+        info['gpu'] = 'N/A'
+
+    try:
+        # Get detailed battery info
+        result = subprocess.run(['wmic', 'path', 'win32_battery', 'get',
+                                 'EstimatedChargeRemaining,BatteryStatus,DesignCapacity,FullChargeCapacity',
+                                 '/value'],
+                                capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if 'EstimatedChargeRemaining=' in line:
+                    charge = line.split('=', 1)[1].strip()
+                    if charge and charge.isdigit():
+                        info['battery_charge'] = charge + '%'
+                if 'BatteryStatus=' in line:
+                    status_code = line.split('=', 1)[1].strip()
+                    if status_code:
+                        # BatteryStatus codes: 1=Discharging, 2=On AC, 3=Fully Charged, etc.
+                        status_map = {
+                            '1': 'Discharging',
+                            '2': 'On AC / Charging',
+                            '3': 'Fully Charged',
+                            '4': 'Low',
+                            '5': 'Critical',
+                            '6': 'Charging',
+                            '7': 'Charging / High',
+                            '8': 'Charging / Low',
+                            '9': 'Charging / Critical',
+                            '10': 'Undefined',
+                            '11': 'Partially Charged',
+                        }
+                        info['battery_status'] = status_map.get(status_code, f'Code {status_code}')
+                if 'DesignCapacity=' in line:
+                    design = line.split('=', 1)[1].strip()
+                    if design and design.isdigit():
+                        info['battery_design_capacity'] = design
+                if 'FullChargeCapacity=' in line:
+                    full = line.split('=', 1)[1].strip()
+                    if full and full.isdigit():
+                        info['battery_full_charge'] = full
+
+        # Check if battery exists and AC status
+        result2 = subprocess.run(['wmic', 'path', 'win32_battery', 'get', 'Name', '/value'],
+                                 capture_output=True, text=True, timeout=5)
+        if result2.returncode == 0:
+            output = result2.stdout.strip()
+            info['has_battery'] = 'Yes' if output and len(output) > 5 else 'No'
+        else:
+            info['has_battery'] = 'No'
+
+        # Calculate health if we have both values
+        if 'battery_design_capacity' in info and 'battery_full_charge' in info:
+            try:
+                design = int(info['battery_design_capacity'])
+                full = int(info['battery_full_charge'])
+
+                if design > 0:
+                    health_percentage = min(100, round((full / design) * 100))
+                    info['battery_health'] = f"{health_percentage}%"
+                else:
+                    info['battery_health'] = "0% (Deep Discharge Alert / Service Required)"
+            except (ValueError, ZeroDivisionError):
+                info['battery_health'] = "N/A (Calibration Pending)"
+
+        # Check if AC is connected via power supply
+        result3 = subprocess.run(['wmic', 'path', 'win32_battery', 'get', 'BatteryStatus', '/value'],
+                                 capture_output=True, text=True, timeout=5)
+        if result3.returncode == 0:
+            for line in result3.stdout.strip().split('\n'):
+                if 'BatteryStatus=' in line:
+                    status = line.split('=', 1)[1].strip()
+                    if status in ['2', '6', '7', '8', '9']:
+                        info['ac_connected'] = 'Yes'
+                    else:
+                        info['ac_connected'] = 'No'
+                    break
+
+    except Exception as e:
+        print(f"Battery info error: {e}")
+        info['has_battery'] = 'Unknown'
+        info['battery_charge'] = 'N/A'
+        info['battery_status'] = 'N/A'
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     try:
         # Get WiFi adapter
         result = subprocess.run(['wmic', 'nic', 'where', 'NetConnectionStatus=2', 'get', 'Name', '/value'],
+<<<<<<< HEAD
                                 capture_output=True, text=True, timeout=5,
                                 creationflags=0x08000000)
+=======
+                                capture_output=True, text=True, timeout=5)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         if result.returncode == 0:
             for line in result.stdout.strip().split('\n'):
                 if 'Name=' in line:
@@ -535,8 +678,12 @@ def _get_system_info_worker():
     try:
         # Check Windows activation
         result = subprocess.run(['cscript', '//Nologo', r'C:\Windows\System32\slmgr.vbs', '/xpr'],
+<<<<<<< HEAD
                                 capture_output=True, text=True, timeout=10,
                                 creationflags=0x08000000)
+=======
+                                capture_output=True, text=True, timeout=10)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         if result.returncode == 0:
             output = result.stdout.lower()
             if 'permanently activated' in output or 'will expire' in output:
@@ -2027,8 +2174,13 @@ def show_hardware_test_screen():
 
     LAYOUT = {
         "outer_gap": 10,
+<<<<<<< HEAD
         "card_pad_x": 14,
         "card_pad_y": 12,
+=======
+        "card_pad_x": 12,
+        "card_pad_y": 8,
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         "card_inner_x": 16,
         "card_inner_y": 10,
         "header_height": 54,
@@ -2207,6 +2359,7 @@ def show_hardware_test_screen():
         active_screen.lift()
     except Exception:
         pass
+<<<<<<< HEAD
 
     # Sequence control variables (relocated from removed Top Bar)
     _sequence_running = [False]
@@ -2224,6 +2377,160 @@ def show_hardware_test_screen():
         try:
             if seq_btn is not None: seq_btn.configure(text="Running...", state="disabled")
         except Exception: pass
+=======
+    # ── Top bar (With Banner Image Support) ──────────────────────────
+        # Check for the banner file in the designated Media folder
+        banner_path = os.path.join(BASE, "media", "dttbanner1.png")  # Corrected to be relative to BASE
+
+        # We increase the header height to accommodate a sleek banner strip
+        banner_height = 120
+
+        top_bar = ctk.CTkFrame(active_screen, fg_color=theme_value("top_bg"), corner_radius=0, height=banner_height)
+        top_bar.pack(fill="x", side="top")
+        top_bar.pack_propagate(False)
+
+        # Attempt to load and set the banner background image
+        if os.path.exists(banner_path):
+            try:
+                # Load with PIL
+                pil_banner = Image.open(banner_path)
+
+                # Resize the PIL image to the target display size
+                target_size = (1460, banner_height)
+                pil_banner_resized = pil_banner.resize(target_size,
+                                                       Image.LANCZOS)  # Use LANCZOS for high quality downsampling
+
+                # Wrap as a CTkImage for high-DPI scaling support
+                ctk_banner = ctk.CTkImage(light_image=pil_banner_resized, dark_image=pil_banner_resized,
+                                          size=target_size)
+
+                banner_canvas = ctk.CTkLabel(top_bar, image=ctk_banner, text="")
+                banner_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+
+                # Retain references to prevent garbage collection
+                banner_canvas._pil_image_ref = pil_banner_resized
+                banner_canvas._ctk_image_ref = ctk_banner
+
+            except Exception as e:
+                print(f"Failed to bind banner image asset layout: {e}")
+
+        # Text header overlay on top of the banner background
+        header_text_lbl = ctk.CTkLabel(
+            top_bar,
+            text="Hardware Test Suite — Revision 0.55  Added RAM Test, Fixed Smartcard Test, and Battery Test",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color="#ffffff" if os.path.exists(banner_path) else theme_value("title"),
+            fg_color="transparent"
+        )
+        header_text_lbl.pack(side="left", padx=18, pady=8)
+
+        top_actions = ctk.CTkFrame(top_bar, fg_color="transparent")
+        top_actions.pack(side="right", padx=14, pady=10)
+
+    # Timer display at the top right
+    global _timer_label
+    _timer_label = ctk.CTkLabel(
+        top_actions,
+        text="◷  00:00:00",
+        font=ctk.CTkFont(size=16, weight="bold"),
+        text_color=theme_value("timer_text"),
+        fg_color=theme_value("timer_bg"),
+        corner_radius=20,
+        width=148,
+        height=38,
+    )
+    _timer_label.pack(side="right", padx=(8, 0))
+
+    ctk.CTkButton(
+        top_actions,
+        text="⚙",
+        width=34,
+        height=34,
+        corner_radius=8,
+        fg_color=theme_value("primary"),
+        hover_color=theme_value("lang_hover"),
+        font=ctk.CTkFont(size=16, weight="bold"),
+    ).pack(side="right", padx=(8, 0))
+
+    ctk.CTkLabel(
+        top_actions,
+        text="Production",
+        font=ctk.CTkFont(size=14, weight="bold"),
+        text_color="#ffffff",
+        fg_color=theme_value("prod_bg"),
+        corner_radius=8,
+        width=118,
+        height=30,
+    ).pack(side="right", padx=(8, 0))
+
+    theme_var = tk.StringVar(value="Light")
+    theme_menu = ctk.CTkOptionMenu(
+        top_actions,
+        variable=theme_var,
+        values=["Light", "Dark"],
+        width=110,
+        height=40,
+        fg_color=theme_value("lang_bg"),
+        button_color=theme_value("lang_button"),
+        button_hover_color=theme_value("lang_hover"),
+        text_color=theme_value("title"),
+        dropdown_text_color=theme_value("title"),
+        corner_radius=8,
+        command=lambda choice: _apply_theme_ref[0](choice.lower()),
+    )
+    theme_menu.pack(side="right", padx=(8, 0))
+
+    lang_var = tk.StringVar(value="English")
+    lang_menu = ctk.CTkOptionMenu(
+        top_actions,
+        variable=lang_var,
+        values=["Español", "English"],
+        width=132,
+        height=40,
+        fg_color=theme_value("lang_bg"),
+        button_color=theme_value("lang_button"),
+        button_hover_color=theme_value("lang_hover"),
+        text_color=theme_value("title"),
+        dropdown_text_color=theme_value("title"),
+        corner_radius=8,
+        command=_apply_language,
+    )
+    lang_menu.pack(side="right", padx=(8, 0))
+
+    ctk.CTkButton(
+        top_actions,
+        text="✕",
+        width=34,
+        height=34,
+        corner_radius=8,
+        fg_color="transparent",
+        hover_color=theme_value("close_hover"),
+        text_color=theme_value("title"),
+        font=ctk.CTkFont(size=18, weight="bold"),
+        command=lambda: _go_back_ref[0](),
+    ).pack(side="right", padx=(8, 0))
+
+    # Timer starts when the hardware screen loads (see show_hardware_test_screen)
+    # Sequence won't start until operator is selected
+    # Run full sequence button
+    _sequence_running = [False]
+    _sequence_run_id = [0]
+    seq_btn = None
+
+    def _set_sequence_button_idle():
+        try:
+            if seq_btn is not None:
+                seq_btn.configure(text="Run Sequence", state="normal")
+        except Exception:
+            pass
+
+    def _set_sequence_button_running():
+        try:
+            if seq_btn is not None:
+                seq_btn.configure(text="Running...", state="disabled")
+        except Exception:
+            pass
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     def _cancel_sequence():
         _sequence_run_id[0] += 1
@@ -2239,7 +2546,12 @@ def show_hardware_test_screen():
         threading.Thread(target=_run_full_sequence, args=(start_key, run_id), daemon=True).start()
 
     def _toggle_sequence():
+<<<<<<< HEAD
         if _sequence_running[0]: return
+=======
+        if _sequence_running[0]:
+            return
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         _start_new_sequence()
 
     def _go_back():
@@ -2313,6 +2625,7 @@ def show_hardware_test_screen():
         except Exception:
             pass
 
+<<<<<<< HEAD
     # ── Banner Header Area (Device Selection) ─────────────────────
     device_strip = ctk.CTkFrame(active_screen, fg_color="#1a1a24", corner_radius=0, height=150)
     device_strip.pack(fill="x", side="top")
@@ -2348,6 +2661,40 @@ def show_hardware_test_screen():
         
         device_strip.bind("<Configure>", _handle_banner_resize)
 
+=======
+    # ── Main Content Container (Body + Sidebar) ─────────────────────
+    device_strip = ctk.CTkFrame(active_screen, fg_color=theme_value("top_bg"), corner_radius=0, height=100)
+    device_strip.pack(fill="x", side="top")
+    device_strip.pack_propagate(False)
+
+    device_tabs = ctk.CTkFrame(device_strip, fg_color="transparent")
+    device_tabs.pack(pady=(12, 12))
+
+    device_tab_buttons = []
+    for label, icon, active in [
+        ("DESKTOP", "🗄️", False),  # Desktop tower
+        ("LAPTOP", "💻", True),
+        ("ALL-IN-ONE", "🖥️", False),  # All-in-One (monitor)
+        ("TABLET", "📱", False),  # Tablet
+        ("COM\nCOMPONENTS", "🖼", False),
+    ]:
+        btn = ctk.CTkButton(
+            device_tabs,
+            text=f"{icon}\n{label}",
+            width=118,
+            height=70,
+            corner_radius=14,
+            fg_color=theme_value("card_bg"),
+            hover_color="#f7fbff",
+            border_width=3 if active else 1,
+            border_color=theme_value("primary") if active else theme_value("card_border"),
+            text_color=theme_value("title"),
+            font=ctk.CTkFont(size=12, weight="bold" if active else "normal"),
+        )
+        btn._is_active_device = active
+        btn.pack(side="left", padx=9)
+        device_tab_buttons.append(btn)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     main_container = ctk.CTkFrame(active_screen, fg_color="transparent")
     main_container.pack(fill="both", expand=True, padx=(0, 8), pady=(6, 10))
@@ -2667,13 +3014,45 @@ def show_hardware_test_screen():
         ctk.set_appearance_mode("dark" if theme_name == "dark" else "light")
 
         active_screen.configure(fg_color=theme_value("screen_bg"))
+<<<<<<< HEAD
         # Header widget configurations (top_bar and device buttons removed)
+=======
+        top_bar.configure(fg_color=theme_value("top_bg"))
+        device_strip.configure(fg_color=theme_value("top_bg"))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         sidebar.configure(fg_color=theme_value("sidebar_bg"), border_color=theme_value("sidebar_bg"))
         sidebar_list.configure(fg_color="transparent")
         body.configure(fg_color=theme_value("screen_bg"))
         _sb_title.configure(text_color=theme_value("title"))
         _global_refresh_btn.configure(text_color=theme_value("subtle"), hover_color=theme_value("refresh_hover"))
         submit_btn.configure(fg_color=theme_value("pass"), hover_color=theme_value("submit_hover"))
+<<<<<<< HEAD
+=======
+        _timer_label.configure(text_color=theme_value("timer_text"), fg_color=theme_value("timer_bg"))
+        theme_menu.configure(
+            fg_color=theme_value("lang_bg"),
+            button_color=theme_value("lang_button"),
+            button_hover_color=theme_value("lang_hover"),
+            text_color=theme_value("title"),
+            dropdown_text_color=theme_value("title"),
+        )
+        lang_menu.configure(
+            fg_color=theme_value("lang_bg"),
+            button_color=theme_value("lang_button"),
+            button_hover_color=theme_value("lang_hover"),
+            text_color=theme_value("title"),
+            dropdown_text_color=theme_value("title"),
+        )
+
+        for btn in device_tab_buttons:
+            is_active = getattr(btn, "_is_active_device", False)
+            btn.configure(
+                fg_color=theme_value("card_bg"),
+                border_color=theme_value("primary") if is_active else theme_value("card_border"),
+                text_color=theme_value("title"),
+                hover_color=theme_value("header_bg"),
+            )
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
         for row in sidebar_list.winfo_children():
             label = getattr(row, "_sidebar_label", None)
@@ -2907,7 +3286,11 @@ def show_hardware_test_screen():
     # 1. AUDIOG RUNNER CARD (runs audiog.ps1 with result display)
     # ══════════════════════════════════════════════════════════════════
     ag_sys_row = ctk.CTkFrame(body, fg_color="transparent")
+<<<<<<< HEAD
     ag_sys_row.pack(fill="x", padx=LAYOUT["card_pad_x"], pady=(LAYOUT["card_pad_y"], 0))
+=======
+    ag_sys_row.pack(fill="x", padx=LAYOUT["card_pad_x"], pady=(8, 4))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     _AG_CARD_WIDTH = 300
 
@@ -2922,7 +3305,11 @@ def show_hardware_test_screen():
             ag_card.pack_propagate(False)
         except Exception:
             pass
+<<<<<<< HEAD
         ag_card.pack(side="left", fill="y", expand=False, padx=(0, 10), pady=0)
+=======
+        ag_card.pack(side="left", fill="y", expand=False, padx=(0, 7), pady=0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     except Exception:
         pass
     # Replace default title with a header row that includes a small refresh icon (Drivers-style)
@@ -3041,8 +3428,13 @@ def show_hardware_test_screen():
         # Use pwsh (PowerShell 7) when available — falls back to powershell (5.1)
         import shutil as _shutil
         _ps_exe = "pwsh" if _shutil.which("pwsh") else "powershell"
+<<<<<<< HEAD
         cmd = [_ps_exe, "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script_path]
         creation_flags = 0x08000000 # CREATE_NO_WINDOW
+=======
+        cmd = [_ps_exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+        creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         try:
             # Redirect stderr into stdout so we don't miss messages
             proc = subprocess.Popen(
@@ -3052,7 +3444,11 @@ def show_hardware_test_screen():
                 stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
+<<<<<<< HEAD
                 creationflags=creation_flags,
+=======
+                creationflags=creation,
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             )
 
             ui_call(lambda: ag_status_label.configure(text=f"Running Audio Changer...", text_color="#7ee787"))
@@ -3459,10 +3855,17 @@ def show_hardware_test_screen():
             report = f"Error: Script not found at {script_path}"
         else:
             # Stream PowerShell output into the GUI textbox without creating
+<<<<<<< HEAD
             # a separate console window. Send a newline to stdin to satisfy 
             # any Read-Host calls in the script.
             cmd = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script_path]
             creation_flags = 0x08000000 # CREATE_NO_WINDOW
+=======
+            # a separate console window. Send a newline to stdin to satisfy
+            # any Read-Host calls in the script.
+            cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+            creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -3471,7 +3874,11 @@ def show_hardware_test_screen():
                     stdin=subprocess.PIPE,
                     text=True,
                     bufsize=1,
+<<<<<<< HEAD
                     creationflags=creation_flags,
+=======
+                    creationflags=creation,
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
                 )
 
                 # Give the script an initial newline in case it immediately waits
@@ -3891,11 +4298,15 @@ def show_hardware_test_screen():
 
         # ── SKU entry click / keyboard logic ───────────────────────
         def _sku_max_len():
+<<<<<<< HEAD
             """Max typed length allowed in the SKU box.
             HP-style (suffix present): base is the first 5 chars, tail is the
             remaining chars of the full sku, optionally +#+suffix.
             Non-HP: base is all-but-last-4, tail is always 4 chars.
             """
+=======
+            """Max typed length allowed in the SKU box."""
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             try:
                 base = _bios_sku_base[0] or ""
                 full = _bios_sku_full[0] or ""
@@ -3952,8 +4363,12 @@ def show_hardware_test_screen():
                 entry = _form_sku_entry[0]
                 if entry is None:
                     return
+<<<<<<< HEAD
             
                 # Force input to Uppercase
+=======
+
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
                 pos = entry.index("insert")
                 val = entry.get()
                 if val != val.upper():
@@ -4105,6 +4520,168 @@ def show_hardware_test_screen():
             ))
             swatch_outer.pack_propagate(False)
 
+<<<<<<< HEAD
+=======
+            color_dot = tk.Frame(swatch_outer, bg=bg_hex, width=36, height=36, cursor="hand2", highlightthickness=0)
+            color_dot.pack(pady=(6, 2))
+            color_dot.pack_propagate(False)
+
+            lbl = ctk.CTkLabel(swatch_outer, text=label, font=ctk.CTkFont(size=9, weight="bold"),
+                               text_color="#9fb3c8")
+            lbl.pack()
+
+            def _select(l=label, outer=swatch_outer, dot=color_dot, bg=bg_hex):
+                _selected_color[0] = l
+                pass
+
+            color_dot.bind("<Button-1>", lambda e, fn=_select: fn())
+            swatch_outer.bind("<Button-1>", lambda e, fn=_select: fn())
+            lbl.bind("<Button-1>", lambda e, fn=_select: fn())
+            _color_btn_refs[label] = swatch_outer
+            return swatch_outer
+
+        # Row 1: first 9 colors
+        color_row1 = _register_ctk_frame(ctk.CTkFrame(color_swatches_frame, fg_color="transparent"))
+        color_row1.pack(fill="x", pady=(0, 4))
+        for label, bg, fg in unit_colors[:9]:
+            _make_color_swatch(color_row1, label, bg, fg).pack(side="left", padx=3)
+
+        # Row 2: last 3 colors
+        color_row2 = _register_ctk_frame(ctk.CTkFrame(color_swatches_frame, fg_color="transparent"))
+        color_row2.pack(fill="x")
+        for label, bg, fg in unit_colors[9:]:
+            _make_color_swatch(color_row2, label, bg, fg).pack(side="left", padx=3)
+
+    except Exception:
+        pass
+
+    # Start the timer immediately when the program loads
+    try:
+        start_timer()
+    except Exception:
+        pass
+
+# Schedule showing the hardware screen after the Tk main loop starts
+app.after(0, show_hardware_test_screen)
+app.mainloop()
+        hotkeys_frame = _register_ctk_frame(
+            ctk.CTkFrame(form_top_row, fg_color=theme_value("embed_bg"), corner_radius=8))
+        hotkeys_frame.pack(side="left", fill="both", padx=(6, 0))
+
+        _register_title_label(ctk.CTkLabel(
+            hotkeys_frame,
+            text="  ● Hotkeys",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc8a",
+            anchor="w"
+        )).pack(fill="x", padx=10, pady=(8, 6))
+
+        hotkeys_cb_frame = _register_ctk_frame(ctk.CTkFrame(hotkeys_frame, fg_color="transparent"))
+        hotkeys_cb_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        _hotkey_vars = {}
+        hotkey_items = [("Mic", "hk_mic"), ("Privacy", "hk_privacy"), ("Speakers", "hk_speakers"),
+                        ("Brightness", "hk_brightness")]
+        for hk_label, hk_key in hotkey_items:
+            hk_var = tk.BooleanVar(value=False)
+            hk_cb = ctk.CTkCheckBox(hotkeys_cb_frame, text=hk_label, variable=hk_var,
+                                    font=ctk.CTkFont(size=12))
+            hk_cb.pack(side="left", padx=(0, 14), pady=4)
+            _hotkey_vars[hk_key] = hk_var
+            _comp_widgets.append(hk_cb)
+
+        # ════════════════════════════════════════════════════════════
+        # BOTTOM ROW: Components (left) | Unit Color (right)
+        # ════════════════════════════════════════════════════════════
+        form_bot_row = _register_ctk_frame(ctk.CTkFrame(form_frame, fg_color="transparent"))
+        form_bot_row.pack(fill="x", pady=(0, 0))
+
+        # ── Components sub-section (bottom-left) ────────────────────
+        comp_inner_frame = _register_ctk_frame(
+            ctk.CTkFrame(form_bot_row, fg_color=theme_value("embed_bg"), corner_radius=8))
+        comp_inner_frame.pack(side="left", fill="both", expand=True, padx=(0, 6))
+
+        _register_title_label(ctk.CTkLabel(
+            comp_inner_frame,
+            text="  ● Components",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc8a",
+            anchor="w"
+        )).pack(fill="x", padx=10, pady=(8, 6))
+
+        comp_state_label = _register_subtle_label(ctk.CTkLabel(
+            comp_inner_frame,
+            text="Components locked until System Info PASS",
+            font=ctk.CTkFont(size=10),
+            text_color="#9fb3c8",
+            anchor="w"
+        ))
+        comp_state_label.pack(anchor="w", padx=12, pady=(0, 4))
+
+        _comp_grid = _register_tk_frame(tk.Frame(comp_inner_frame, bg=theme_value("embed_bg")))
+        _comp_grid.pack(fill="x", padx=10, pady=(0, 8))
+
+        comp_labels = [
+            ("WWAN", "wwan"),
+            ("WLAN", "wlan"),
+            ("Privacy", "privacy"),
+            ("NFC", "nfc"),
+            ("Smart Card", "smartcard"),
+            ("Backlight", "backlight"),
+            ("RGB Keyboard", "rgb_keyboard"),
+            ("Fingerprint", "fingerprint"),
+        ]
+        for i, (label_text, key) in enumerate(comp_labels):
+            var = tk.BooleanVar(value=False)
+            cb = ctk.CTkCheckBox(_comp_grid, text=label_text, variable=var)
+            cb.grid(row=i // 4, column=i % 4, sticky="w", padx=8, pady=4)
+            _comp_vars[key] = var
+            _comp_widgets.append(cb)
+
+        _set_components_active(False)
+
+        # ── Unit Color sub-section (bottom-right) ───────────────────
+        color_frame = _register_ctk_frame(ctk.CTkFrame(form_bot_row, fg_color=theme_value("embed_bg"), corner_radius=8))
+        color_frame.pack(side="left", fill="both", padx=(6, 0))
+
+        _register_title_label(ctk.CTkLabel(
+            color_frame,
+            text="  ● Unit Color",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc8a",
+            anchor="w"
+        )).pack(fill="x", padx=10, pady=(8, 6))
+
+        color_swatches_frame = _register_ctk_frame(ctk.CTkFrame(color_frame, fg_color="transparent"))
+        color_swatches_frame.pack(fill="x", padx=10, pady=(0, 10))
+
+        _selected_color = [None]
+
+        unit_colors = [
+            ("BLACK", "#1a1a1a", "#ffffff"),
+            ("WHITE", "#f0f0f0", "#888888"),
+            ("RED", "#cc2222", "#ffffff"),
+            ("BLUE", "#1a50cc", "#ffffff"),
+            ("GREEN", "#1a8c1a", "#ffffff"),
+            ("YELLOW", "#cccc00", "#333333"),
+            ("ORANGE", "#cc6600", "#ffffff"),
+            ("PURPLE", "#7722cc", "#ffffff"),
+            ("PINK", "#f0a0b0", "#333333"),
+            ("BROWN", "#7a2a10", "#ffffff"),
+            ("GRAY", "#707070", "#ffffff"),
+            ("SILVER", "#c0c0c0", "#333333"),
+        ]
+
+        _color_btn_refs = {}
+
+        def _make_color_swatch(parent, label, bg_hex, fg_hex):
+            swatch_outer = _register_ctk_frame(ctk.CTkFrame(
+                parent, fg_color=theme_value("card_bg"), corner_radius=8,
+            border_width=0, border_color="#3a3f4a", width=62, height=62
+            ))
+            swatch_outer.pack_propagate(False)
+
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             # Create the color dot with the actual background color.
             # NOTE: intentionally NOT registered via _register_tk_frame —
             # that list gets force-recolored to the theme's embed_bg on
@@ -4609,7 +5186,11 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     ram_card = card(body, "🧠  Memory", track_key="ram")
     try:
+<<<<<<< HEAD
         ram_card.pack_configure(fill="x", padx=14, pady=(LAYOUT["card_pad_y"], 0))
+=======
+        ram_card.pack_configure(fill="x", padx=14, pady=8)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     except Exception:
         pass
     try:
@@ -4700,11 +5281,18 @@ def show_hardware_test_screen():
             "\"$($_.DeviceLocator)|$($_.Capacity)|$($_.Speed)|$($_.ConfiguredClockSpeed)|"
             "$($_.Manufacturer)|$($_.PartNumber)\" }"
         )
+<<<<<<< HEAD
         creation_flags = 0x08000000 # CREATE_NO_WINDOW
         result = subprocess.run(
             ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
             capture_output=True, text=True, timeout=20, 
             creationflags=creation_flags
+=======
+        creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+            capture_output=True, text=True, timeout=20, creationflags=creation
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         )
         modules = []
         for line in (result.stdout or "").splitlines():
@@ -4869,9 +5457,16 @@ def show_hardware_test_screen():
             except Exception:
                 pass
             try:
+<<<<<<< HEAD
                 _start_battery_embed()
             except Exception:
                 pass
+=======
+                threading.Thread(target=_bat_refresh, daemon=True).start()
+            except Exception:
+                pass
+
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         ui_call(_show_and_start_bat)
 
     try:
@@ -4904,7 +5499,11 @@ def show_hardware_test_screen():
     # 4. BATTERY + TOUCHPAD ROW
     # ══════════════════════════════════════════════════════════════════
     bat_tp_row = ctk.CTkFrame(body, fg_color="transparent")
+<<<<<<< HEAD
     bat_tp_row.pack(fill="x", padx=14, pady=(LAYOUT["card_pad_y"], 0))
+=======
+    bat_tp_row.pack(fill="x", padx=14, pady=8)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     bat_card = card(bat_tp_row, "🔋  Battery", track_key="bat")
     try:
@@ -4912,7 +5511,11 @@ def show_hardware_test_screen():
     except Exception:
         pass
     try:
+<<<<<<< HEAD
         bat_card.pack(side="left", fill="both", expand=True, padx=(0, 10), pady=0)
+=======
+        bat_card.pack(side="left", fill="both", expand=True, padx=(0, 7), pady=0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     except Exception:
         pass
     # Header like Drivers with small refresh icon
@@ -5057,14 +5660,22 @@ def show_hardware_test_screen():
 
     # Row for Speaker, Mic, and Brightness
     test_row_compact_top = _register_tk_frame(tk.Frame(body, bg=theme_value("screen_bg")))
+<<<<<<< HEAD
     test_row_compact_top.pack(fill="x", padx=14, pady=(LAYOUT["card_pad_y"], 0))
+=======
+    test_row_compact_top.pack(fill="x", padx=14, pady=8)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     # ══════════════════════════════════════════════════════════════════
     # SPEAKER CARD
     # ══════════════════════════════════════════════════════════════════
     spk_card = card(test_row_compact_top, "🔊  Speaker Test", track_key="spk")
     spk_card.pack_forget()
+<<<<<<< HEAD
     spk_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    spk_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     # Header like Drivers with small refresh icon
     try:
         try:
@@ -5200,7 +5811,11 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     mic_card = card(test_row_compact_top, "🎤  Microphone Test", track_key="mic")
     mic_card.pack_forget()
+<<<<<<< HEAD
     mic_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    mic_card.pack(side="left", fill="both", expand=True, padx=5)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     # Header like Drivers with small refresh icon
     try:
         try:
@@ -5513,7 +6128,11 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     brightness_card = card(test_row_compact_top, "💡  Brightness", track_key="br")
     brightness_card.pack_forget()
+<<<<<<< HEAD
     brightness_card.pack(side="left", fill="both", expand=True, padx=0)
+=======
+    brightness_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     try:
         try:
             brightness_card.winfo_children()[0].destroy()
@@ -5830,7 +6449,11 @@ def show_hardware_test_screen():
             # Instantiate the class (assuming standard naming convention)
             if hasattr(sc_mod, "SmartCardWidget"):
                 sc_mod.SmartCardWidget(embed_host=sc_host)
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             sc_host.update_idletasks()
             sc_status.configure(text="Smart Card module loaded.", text_color="#7ee787")
         except Exception as e:
@@ -5846,7 +6469,15 @@ def show_hardware_test_screen():
                 _highlight_and_show(usb_card)
             except Exception:
                 pass
+<<<<<<< HEAD
             _start_smartcard_embed()
+=======
+            try:
+                threading.Thread(target=_usbport_refresh, daemon=True).start()
+            except Exception:
+                pass
+
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         ui_call(_show_and_start_usb)
 
     try:
@@ -5978,11 +6609,18 @@ def show_hardware_test_screen():
                 return
 
             result = subprocess.run(
+<<<<<<< HEAD
                 ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ps_path],
                 capture_output=True,
                 text=True,
                 timeout=30,
                 creationflags=0x08000000
+=======
+                ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_path],
+                capture_output=True,
+                text=True,
+                timeout=30
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             )
 
             output = result.stdout
@@ -6159,7 +6797,11 @@ def show_hardware_test_screen():
 
     # Row for Touchscreen, Pixel, and Camera
     test_row_compact = _register_tk_frame(tk.Frame(body, bg=theme_value("screen_bg")))
+<<<<<<< HEAD
     test_row_compact.pack(fill="x", padx=14, pady=(LAYOUT["card_pad_y"], 0))
+=======
+    test_row_compact.pack(fill="x", padx=14, pady=8)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     # ══════════════════════════════════════════════════════════════════
     # NFC READER CARD
@@ -6209,11 +6851,16 @@ def show_hardware_test_screen():
                 ui_call(lambda: nfc_status_lbl.configure(text="NFCTest.ps1 not found!", text_color="#ff7b72"))
                 _nfc_running[0] = False
                 return
+<<<<<<< HEAD
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ps], 
                 capture_output=True, text=True, timeout=30,
                 creationflags=0x08000000
             )
+=======
+            r = subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", ps], capture_output=True,
+                               text=True, timeout=30)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             out = r.stdout
             svc = "Unknown";
             tot = 0;
@@ -6343,11 +6990,16 @@ def show_hardware_test_screen():
                 ui_call(lambda: fp_status_lbl.configure(text="FingerprintTest.ps1 not found!", text_color="#ff7b72"))
                 _fp_running[0] = False
                 return
+<<<<<<< HEAD
             r = subprocess.run(
                 ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ps], 
                 capture_output=True, text=True, timeout=30,
                 creationflags=0x08000000
             )
+=======
+            r = subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", ps], capture_output=True,
+                               text=True, timeout=30)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             out = r.stdout
             svc = "Unknown";
             bio = 0;
@@ -6450,7 +7102,11 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     touchscreen_card = card(test_row_compact, "👆  Touchscreen", track_key="ts")
     touchscreen_card.pack_forget()
+<<<<<<< HEAD
     touchscreen_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    touchscreen_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     try:
         try:
             touchscreen_card.winfo_children()[0].destroy()
@@ -6703,7 +7359,11 @@ def show_hardware_test_screen():
     # PIXEL TEST CARD
     pixel_card = card(test_row_compact, "🧪  Pixel Test", track_key="px")
     pixel_card.pack_forget()
+<<<<<<< HEAD
     pixel_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    pixel_card.pack(side="left", fill="both", expand=True, padx=5)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     try:
         try:
             pixel_card.winfo_children()[0].destroy()
@@ -6928,7 +7588,11 @@ def show_hardware_test_screen():
     # CAMERA CARD (inline preview in main menu)
     cam_card = card(test_row_compact, "📷  Camera Test", track_key="cam")
     cam_card.pack_forget()
+<<<<<<< HEAD
     cam_card.pack(side="left", fill="both", expand=True, padx=0)
+=======
+    cam_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
     # Drivers-style header with small refresh icon
     try:
         try:
@@ -7435,12 +8099,20 @@ def show_hardware_test_screen():
     # ══════════════════════════════════════════════════════════════════
     # Create a horizontal row to hold Activation and Drivers cards side-by-side
     row_frame = _register_tk_frame(tk.Frame(body, bg=theme_value("screen_bg")))
+<<<<<<< HEAD
     row_frame.pack(fill="x", padx=14, pady=(LAYOUT["card_pad_y"], 0))
+=======
+    row_frame.pack(fill="x", padx=14, pady=8)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     # Activation card (left)
     act_card = ctk.CTkFrame(row_frame, fg_color=theme_value("card_bg"), corner_radius=10,
                             border_width=1, border_color=theme_value("card_border"))
+<<<<<<< HEAD
     act_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    act_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     # Activation header (Drivers-style with small refresh icon)
     try:
@@ -7590,7 +8262,11 @@ def show_hardware_test_screen():
     # Drivers card (right)
     drv_card = ctk.CTkFrame(row_frame, fg_color=theme_value("card_bg"), corner_radius=10,
                             border_width=1, border_color=theme_value("card_border"))
+<<<<<<< HEAD
     drv_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+=======
+    drv_card.pack(side="left", fill="both", expand=True, padx=5)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     # Header with title + refresh button
     header_row = ctk.CTkFrame(drv_card, fg_color="transparent")
@@ -7814,7 +8490,11 @@ catch {
     # GPU card (right)
     gpu_card = ctk.CTkFrame(row_frame, fg_color=theme_value("card_bg"), corner_radius=10,
                             border_width=1, border_color=theme_value("card_border"))
+<<<<<<< HEAD
     gpu_card.pack(side="left", fill="both", expand=True, padx=0)
+=======
+    gpu_card.pack(side="left", fill="both", expand=True, padx=(5, 0))
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
 
     header_row_gpu = ctk.CTkFrame(gpu_card, fg_color="transparent")
     header_row_gpu.pack(fill="x", padx=14, pady=(10, 6))
@@ -8055,8 +8735,13 @@ catch {
                 app.after(0, lambda: enroll_status.configure(text="EnrollmentTest.ps1 not found", text_color="#ff7b72"))
                 return
 
+<<<<<<< HEAD
             cmd = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script_path]
             creation_flags = 0x08000000 # CREATE_NO_WINDOW
+=======
+            cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+            creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -8064,7 +8749,11 @@ catch {
                 stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
+<<<<<<< HEAD
                 creationflags=creation_flags,
+=======
+                creationflags=creation,
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             )
             ui_call(
                 lambda: enroll_status.configure(text=f"Checking enrollment (PID {proc.pid})...", text_color="#9fb3c8"))
@@ -8208,8 +8897,13 @@ catch {
             app.after(0, lambda: vs_status.configure(text="windef.ps1 not found", text_color="#ff7b72"))
             return
 
+<<<<<<< HEAD
         cmd = ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script_path]
         creation_flags = 0x08000000 # CREATE_NO_WINDOW
+=======
+        cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+        creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -8218,7 +8912,11 @@ catch {
                 stdin=subprocess.DEVNULL,
                 text=True,
                 bufsize=1,
+<<<<<<< HEAD
                 creationflags=creation_flags,
+=======
+                creationflags=creation,
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
             )
             ui_call(lambda: vs_status.configure(text=f"Scanning (PID {proc.pid})...", text_color="#7ee787"))
 
@@ -8564,6 +9262,7 @@ catch {
                 _net_refresh()
                 return True
             if key == 'ram':
+<<<<<<< HEAD
                 threading.Thread(target=_ram_refresh, daemon=True).start()
                 return True
             if key == 'bat':
@@ -8580,6 +9279,12 @@ catch {
                 return True
             if key == 'fingerprint':
                 threading.Thread(target=_fingerprint_refresh, daemon=True).start()
+=======
+                app.after(0, _start_smartcard_embed)
+                return True
+            if key == 'bat':
+                threading.Thread(target=_bat_refresh, daemon=True).start()
+>>>>>>> fbdbd1e3e353eb170b7cfd0524703d378e569047
                 return True
             if key == 'spk':
                 _log_sequence("starting speaker playback")
