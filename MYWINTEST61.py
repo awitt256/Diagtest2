@@ -2932,14 +2932,21 @@ def show_hardware_test_screen():
 
         # FORCE the sequence to move to the audio card and start it
         def _force_start_audio():
-            # 1. Manually highlight and focus
+            # 1. Mark Operator card passed FIRST
+            if hasattr(operator_card, 'set_pass'):
+                operator_card.set_pass()
+
+            # 2. Highlight and show the audio card
             _highlight_and_show(ag_card)
-            # 2. Force the card state to Active
-            ag_is_running[0] = False  # Reset state
-            _run_audiog_clicked()  # Call the trigger
-            # 3. Mark Operator card passed so the sequencer moves focus forward
-            operator_card.set_pass()
-            ui_call(_run_audiog_clicked)
+
+            # 3. Reset audio card state
+            ag_is_running[0] = False
+
+            # 4. Start the audio test (ONLY ONCE)
+            _run_audiog_clicked()
+
+        # Schedule it to run after UI updates complete
+        app.after(150, _force_start_audio)
 
     op_buttons = []
     for op_name, op_color in operators:
