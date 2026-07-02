@@ -9,6 +9,7 @@ import threading
 import time
 import platform
 import socket
+import uuid
 from tkinter import messagebox, ttk
 from PIL import Image, ImageGrab
 import tempfile
@@ -20,28 +21,12 @@ import psutil
 # banner image placeholder (unused)
 
 
-# ══════════════════════════════════════════════════════════════════
-# ✅ Catch crashes safely so the window doesn't close silently
-# ══════════════════════════════════════════════════════════════════
+# ✅ Catch crashes so the window doesn't close silently
 import traceback
 
 
 def excepthook(exc_type, exc_value, exc_tb):
-    # Safe explicit console header print
-    print("\n" + "═" * 70)
-    print(" [!] DTT HARDWARE BENCH CRASH ENCOUNTERED")
-    print("═" * 70)
-    print(f" ERROR TYPE:    {exc_type.__name__ if exc_type else 'Unknown'}")
-    print(f" ERROR MESSAGE: {exc_value}\n")
-
-    # Simple fallback traceback printer that won't trigger Python 3.14 recursion loops
-    try:
-        print(" TRACEBACK LOGS:")
-        traceback.print_tb(exc_tb)
-    except Exception:
-        print(" [!] Could not generate formal stack trace formatting.")
-    print("═" * 70)
-
+    traceback.print_exception(exc_type, exc_value, exc_tb)
     input("Press ENTER to exit...")
 
 
@@ -68,15 +53,6 @@ try:
     _mic_spec.loader.exec_module(MicTest2)
 except Exception:
     MicTest2 = None
-
-# ✅ Import embedded port monitor (USB / HDMI / Ethernet / Audio Jack detection)
-_portcheck_path = _os.path.join(_os.path.dirname(__file__), "portcheck2.py")
-_portcheck_spec = _importlib_util.spec_from_file_location("portcheck2", _portcheck_path)
-portcheck2 = _importlib_util.module_from_spec(_portcheck_spec)
-try:
-    _portcheck_spec.loader.exec_module(portcheck2)
-except Exception:
-    portcheck2 = None
 
 # ------------------------------------------------------------------
 # Config
@@ -286,7 +262,7 @@ except Exception as e:
     # Continue anyway if elevation fails
 
 app = ctk.CTk()
-app.title("DTT V. 0.58 Revision- Consolidated UI and Hardware Detection Fixes")
+app.title("DTT V. 0.59 Revision- Working version got port checker added")
 app.geometry("850x700")
 
 # Start the main window maximized on Windows
@@ -1930,8 +1906,8 @@ def show_hardware_test_screen():
             "☀️ Brightness": "☀️ Brillo",
             "💳  Smart Card Reader": "💳  Lector de Tarjeta Inteligente",
             "💳 Smart Card": "💳 Tarjeta Inteligente",
-            "🔌  USB Port Detection": "🔌  Detección de Puertos USB",
-            "🔌 USB Port Detection": "🔌 Detección de Puertos USB",
+            "🔌  Port Check": "🔌  Verificación de Puertos",
+            "🔌 Port Check": "🔌 Verificación de Puertos",
             "📡  NFC Reader": "📡  Lector NFC",
             "📡 NFC Reader": "📡 Lector NFC",
             "👆  Fingerprint Reader": "👆  Lector de Huella Digital",
@@ -2730,12 +2706,11 @@ def show_hardware_test_screen():
                 pass
 
         try:
-            parent = widget.nametowidget(widget.winfo_parent())
-            parent.bind("<Configure>", _update_width, add="+")
+            widget.after_idle(_update_width)
         except Exception:
             pass
         try:
-            widget.after_idle(_update_width)
+            widget.after(250, _update_width)
         except Exception:
             pass
 
@@ -2924,29 +2899,44 @@ def show_hardware_test_screen():
     ]
 
     def _select_operator(name, color):
+        """Handle operator selection."""
         _selected_operator[0] = name
         _operator_confirmed[0] = True
-        operator_status.configure(text=f"✅ Operator: {name}", text_color="#7ee787")
+
+        # Update status
+        operator_status.configure(
+            text=f"✅ Operator: {name}",
+            text_color="#7ee787"
+        )
+
+        # Disable all buttons after selection
         for btn in op_buttons:
             btn.configure(state="disabled", fg_color="#333333")
 
-        # FORCE the sequence to move to the audio card and start it
-        def _force_start_audio():
-            # 1. Mark Operator card passed FIRST
-            if hasattr(operator_card, 'set_pass'):
-                operator_card.set_pass()
+        # Highlight selected button
+        sender_btn = None
+        for btn in op_buttons:
+            if btn._name == f"op_btn_{name}":
+                sender_btn = btn
+                btn.configure(fg_color=color, hover_color=color)
 
-            # 2. Highlight and show the audio card
-            _highlight_and_show(ag_card)
+        # Auto-advance to Audio Changer after selection
+        def _show_next():
+            try:
+                _highlight_and_show(ag_card)
+            except Exception:
+                pass
+            try:
+                _run_audiog_clicked()
+            except Exception:
+                pass
+            # Run network detection to pull info (NO auto-pass/fail yet)
+            try:
+                threading.Thread(target=lambda: _net_refresh(auto_pass_fail=False), daemon=True).start()
+            except Exception:
+                pass
 
-            # 3. Reset audio card state
-            ag_is_running[0] = False
-
-            # 4. Start the audio test (ONLY ONCE)
-            _run_audiog_clicked()
-
-        # Schedule it to run after UI updates complete
-        app.after(150, _force_start_audio)
+        ui_call(_show_next)
 
     op_buttons = []
     for op_name, op_color in operators:
@@ -2968,115 +2958,237 @@ def show_hardware_test_screen():
     # No need for button override since operator card auto-advances
 
     # ══════════════════════════════════════════════════════════════════
-    # 1. AUDIOG RUNNER CARD (STABILIZED FIXED IMPLEMENTATION)
+    # 1. AUDIOG RUNNER CARD (runs audiog.ps1 with result display)
     # ══════════════════════════════════════════════════════════════════
+    ag_sys_row = ctk.CTkFrame(body, fg_color="transparent")
+    ag_sys_row.pack(fill="x", padx=LAYOUT["card_pad_x"], pady=(LAYOUT["card_pad_y"], 0))
+
     _AG_CARD_WIDTH = 300
 
-    # Mount directly to 'body' so the sequencer grid manages the layout
-    ag_card = card(body, "🔈  Audio Changer", track_key="ag")
-
-    # Container for results (Set expand=False to prevent layout-pushing)
-    ag_results_frame = ctk.CTkFrame(ag_card, fg_color="transparent")
-    ag_results_frame.pack(fill="x", expand=False, padx=14, pady=(0, 10))
-
-    # State tracking
-    ag_output_labels = []
-    ag_is_running = [False]
-
-    # Clean up header
+    ag_card = card(ag_sys_row, "🔈  Audio Changer", track_key="ag")
     try:
-        first_child = ag_card.winfo_children()[0]
-        first_child.destroy()
+        ag_card.pack_forget()
+    except Exception:
+        pass
+    try:
+        ag_card.configure(width=_AG_CARD_WIDTH)
+        try:
+            ag_card.pack_propagate(False)
+        except Exception:
+            pass
+        ag_card.pack(side="left", fill="y", expand=False, padx=(0, 10), pady=0)
+    except Exception:
+        pass
+    # Replace default title with a header row that includes a small refresh icon (Drivers-style)
+    try:
+        try:
+            first_child = ag_card.winfo_children()[0]
+            try:
+                first_child.destroy()
+            except Exception:
+                pass
+        except Exception:
+            pass
+        header_row = ctk.CTkFrame(ag_card, fg_color="transparent")
+        header_row.pack(fill="x", padx=14, pady=(10, 6))
+        ctk.CTkLabel(header_row, text="🔈  Audio Changer", font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color="#58a6ff").pack(side="left")
+        try:
+            ctk.CTkButton(header_row, text="⟳", width=28, height=28, fg_color="#444444", hover_color="#555555",
+                          command=_run_audiog_clicked).pack(side="right")
+        except Exception:
+            pass
     except Exception:
         pass
 
-    header_row = ctk.CTkFrame(ag_card, fg_color="transparent")
-    header_row.pack(fill="x", padx=14, pady=(10, 6))
-    ctk.CTkLabel(header_row, text="🔈  Audio Changer", font=ctk.CTkFont(size=14, weight="bold"),
-                 text_color="#58a6ff").pack(side="left")
-
     ag_status_label = _register_subtle_label(
-        ctk.CTkLabel(ag_card, text="Awaiting sequence...", font=ctk.CTkFont(size=12), text_color="#9fb3c8"))
+        ctk.CTkLabel(ag_card, text="Running audio configuration...", font=ctk.CTkFont(size=12), text_color="#9fb3c8"))
     ag_status_label.pack(anchor="w", padx=14, pady=(0, 10))
+
+    ag_is_running = [False]
+    # Current highlighted card (outline when active)
+    _current_highlight = [None]
+    _default_border_color = "#30363d"
+    _highlight_color = "#7ee787"
+
+    def _clear_highlight():
+        try:
+            cur = _current_highlight[0]
+            if cur is not None and widget_exists(cur):
+                try:
+                    cur.configure(border_color=_default_border_color, border_width=1)
+                except Exception:
+                    pass
+            _current_highlight[0] = None
+        except Exception:
+            pass
+
+    def _highlight_and_show(card, color=None):
+        try:
+            if color is None:
+                color = _highlight_color
+            # clear previous
+            try:
+                prev = _current_highlight[0]
+                if prev is not None and prev is not card and widget_exists(prev):
+                    try:
+                        prev.configure(border_color=_default_border_color, border_width=1)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # apply highlight
+            try:
+                if widget_exists(card):
+                    try:
+                        card.configure(border_color=color, border_width=3)
+                    except Exception:
+                        pass
+                    try:
+                        card.lift()
+                    except Exception:
+                        pass
+                    # scroll into view if possible
+                    try:
+                        scroll_to_widget(card)
+                    except Exception:
+                        pass
+                    _current_highlight[0] = card
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # Results labels frame
+    ag_results_frame = ctk.CTkFrame(ag_card, fg_color="transparent")
+    ag_results_frame.pack(fill="both", expand=False, padx=14, pady=(0, 10))
+    # Buffer for dynamic output lines
+    ag_output_labels = []
 
     def _add_ag_line(line):
         try:
             lbl = ctk.CTkLabel(ag_results_frame, text=line.strip(), font=ctk.CTkFont(size=10), text_color="#d4af37",
-                               justify="left", anchor="w", wraplength=260)
-            lbl.pack(anchor="w", pady=1, fill="x")
+                               justify="left", wraplength=260)
+            lbl.pack(anchor="w", pady=2)
             ag_output_labels.append(lbl)
-            if len(ag_output_labels) > 8:
+            if len(ag_output_labels) > 15:
                 old = ag_output_labels.pop(0)
                 old.destroy()
         except Exception:
             pass
 
-    def _start_audiog():
-        # Bypass logic to prevent stall
-        if ag_is_running[0]: return
-        ag_is_running[0] = True
+    # Result labels
+    # Removed summary labels (Current Device / Switched To / Input Device)
+    # to keep the Audio Changer output contained in the dynamic results frame.
 
+    def _start_audiog():
+        if ag_is_running[0]:
+            return
+        ag_is_running[0] = True
         script_path = os.path.join(BASE, "audiog.ps1")
         if not os.path.exists(script_path):
             ui_call(lambda: ag_status_label.configure(text="audiog.ps1 not found", text_color="#ff7b72"))
             ag_is_running[0] = False
             return
 
+        # Use pwsh (PowerShell 7) when available — falls back to powershell (5.1)
         import shutil as _shutil
         _ps_exe = "pwsh" if _shutil.which("pwsh") else "powershell"
         cmd = [_ps_exe, "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", script_path]
-
+        creation_flags = 0x08000000  # CREATE_NO_WINDOW
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL, text=True, bufsize=1, creationflags=0x08000000)
+            # Redirect stderr into stdout so we don't miss messages
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,
+                creationflags=creation_flags,
+            )
 
-            ui_call(lambda: ag_status_label.configure(text="Running Audio Changer...", text_color="#58a6ff"))
+            ui_call(lambda: ag_status_label.configure(text=f"Running Audio Changer...", text_color="#7ee787"))
+            # highlight audio card when starting
+            try:
+                ui_call(lambda: _highlight_and_show(ag_card))
+            except Exception:
+                pass
 
             def _reader():
                 try:
+                    # Read combined stdout+stderr and append every line to the results frame
                     while True:
+                        if proc.stdout is None:
+                            break
                         line = proc.stdout.readline()
-                        if not line and proc.poll() is not None: break
-                        if line:
-                            ui_call(_add_ag_line, line)
-                        else:
+                        if not line:
+                            if proc.poll() is not None:
+                                break
                             time.sleep(0.1)
+                            continue
+
+                        ui_call(_add_ag_line, line)
                 finally:
                     rc = proc.poll() or 0
-                    ui_call(lambda: ag_status_label.configure(text="✓ Done" if rc == 0 else "✗ Failed",
-                                                              text_color="#7ee787" if rc == 0 else "#ff7b72"))
-                    # Baton Pass
                     if rc == 0:
-                        ui_call(lambda: hasattr(ag_card, 'set_pass') and ag_card.set_pass())
+                        status_text = "✓ Completed successfully"
+                        color = "#7ee787"
                     else:
-                        ui_call(lambda: hasattr(ag_card, 'set_fail') and ag_card.set_fail())
-
-                    # Auto-Advance to System Info
-                    ui_call(lambda: _highlight_and_show(sys_card))
-                    ui_call(_start_system_info_once)
+                        status_text = f"✗ Failed (exit code {rc})"
+                        color = "#ff7b72"
+                    ui_call(lambda: ag_status_label.configure(text=status_text, text_color=color))
+                    # Also update the Audio Changer card status buttons automatically
+                    try:
+                        if rc == 0:
+                            ui_call(lambda: hasattr(ag_card, 'set_pass') and ag_card.set_pass())
+                        else:
+                            ui_call(lambda: hasattr(ag_card, 'set_fail') and ag_card.set_fail())
+                    except Exception:
+                        pass
+                    # After audio completes, jump to System Info and highlight it
+                    try:
+                        ui_call(lambda: _highlight_and_show(sys_card))
+                        ui_call(_start_system_info_once)
+                    except Exception:
+                        pass
                     ag_is_running[0] = False
 
             threading.Thread(target=_reader, daemon=True).start()
+
         except Exception as e:
             ui_call(lambda: ag_status_label.configure(text=f"Error: {str(e)}", text_color="#ff7b72"))
             ag_is_running[0] = False
 
     def _run_audiog_clicked():
-        for lbl in list(ag_output_labels): lbl.destroy()
-        ag_output_labels.clear()
+        if ag_is_running[0]:
+            return
+        try:
+            for lbl in list(ag_output_labels):
+                try:
+                    lbl.destroy()
+                except Exception:
+                    pass
+            ag_output_labels.clear()
+        except Exception:
+            pass
         threading.Thread(target=_start_audiog, daemon=True).start()
 
-    # Refresh Button
-    ctk.CTkButton(header_row, text="⟳", width=28, height=28, fg_color="#444444", hover_color="#555555",
-                  command=_run_audiog_clicked).pack(side="right")
-    # ════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-    # ══════════════════════════════════════════════════════════════════
+    # Run button removed; use header ⟳ to trigger audio changer
+
+    # Start audiog.ps1 after the Tk event loop begins
+    try:
+        app.after(0, lambda: threading.Thread(target=_start_audiog, daemon=True).start())
+    except Exception:
+        threading.Thread(target=_start_audiog, daemon=True).start()
 
     # ══════════════════════════════════════════════════════════════════
     # 2. SYSTEM INFO CARD (embedded module)
     # ══════════════════════════════════════════════════════════════════
     # Create a System Info card that expands vertically and is scrollable
-    sys_card = card(body, "🖥️  System Info", track_key="sys")    # Replace default title with Drivers-style header + refresh icon
+    sys_card = card(ag_sys_row, "🖥️  System Info", track_key="sys")
+    # Replace default title with Drivers-style header + refresh icon
     try:
         try:
             first_child = sys_card.winfo_children()[0]
@@ -5861,9 +5973,9 @@ def show_hardware_test_screen():
         pass
 
     # ══════════════════════════════════════════════════════════════════
-    # USB PORT DETECTION CARD  (embedded portcheck2.py port monitor)
+    # PORT CHECK CARD
     # ══════════════════════════════════════════════════════════════════
-    usb_card = card(body, "🔌  USB Port Detection", track_key="usb")
+    usb_card = card(body, "🔌  Port Check", track_key="usb")
     try:
         usb_card.pack_forget()
     except Exception:
@@ -5876,7 +5988,7 @@ def show_hardware_test_screen():
     # Header with refresh button
     usb_header_row = ctk.CTkFrame(usb_card, fg_color="transparent")
     usb_header_row.pack(fill="x", padx=14, pady=(10, 6))
-    ctk.CTkLabel(usb_header_row, text="🔌  USB Port Detection",
+    ctk.CTkLabel(usb_header_row, text="🔌  Port Check",
                  font=ctk.CTkFont(size=14, weight="bold"),
                  text_color="#58a6ff").pack(side="left")
 
@@ -5888,160 +6000,515 @@ def show_hardware_test_screen():
         height=28,
         fg_color="#444444",
         hover_color="#555555",
-        command=lambda: threading.Thread(target=_usbport_refresh, daemon=True).start()
+        command=lambda: None
     ).pack(side="right")
 
     # Status display
     usb_status = ctk.CTkLabel(
         usb_card,
-        text="Detecting USB, HDMI, Ethernet, and Audio Jack...",
+        text="Configure ports and click 'Start Testing'",
         font=ctk.CTkFont(size=12),
         text_color="#9fb3c8",
     )
     usb_status.pack(anchor="w", padx=14, pady=(0, 6))
 
-    # USB info display frame — hosts the USB / HDMI / Ethernet / Audio Jack
-    # port-monitor rows powered by portcheck2.py's detection functions.
-    usb_info_frame = _register_ctk_frame(ctk.CTkFrame(usb_card, fg_color=theme_value("embed_bg"), corner_radius=8))
-    usb_info_frame.pack(fill="x", padx=14, pady=(0, 10))
+    # Configuration frame
+    usb_config_frame = _register_ctk_frame(ctk.CTkFrame(usb_card, fg_color=theme_value("embed_bg"), corner_radius=8))
+    usb_config_frame.pack(fill="x", padx=14, pady=(0, 10))
 
-    _USB_ROW_GREEN = "#2ecc71"
-    _USB_ROW_RED = "#ff6b6b"
-    _USB_ROW_WHITE = "#ffffff"
+    # Port configuration inputs
+    config_row = ctk.CTkFrame(usb_config_frame, fg_color="transparent")
+    config_row.pack(fill="x", padx=12, pady=10)
 
-    class _UsbCardPortRow:
-        """Compact port-status row (indicator dot + title + summary + details),
-        adapted from portcheck2.py's PortRow for embedding inside this card."""
+    ctk.CTkLabel(config_row, text="USB:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=0, padx=(0, 5))
+    usb_count_var = ctk.StringVar(value="2")
+    ctk.CTkEntry(config_row, textvariable=usb_count_var, width=50, height=28).grid(row=0, column=1, padx=(0, 15))
 
-        def __init__(self, parent, title, note):
-            self.frame = tk.Frame(parent, bg=theme_value("embed_bg"))
-            self.frame.pack(fill="x", padx=12, pady=(8, 4))
+    ctk.CTkLabel(config_row, text="USB-C:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=2, padx=(0, 5))
+    usbc_count_var = ctk.StringVar(value="2")
+    ctk.CTkEntry(config_row, textvariable=usbc_count_var, width=50, height=28).grid(row=0, column=3, padx=(0, 15))
 
-            self.indicator = tk.Canvas(self.frame, width=18, height=18,
-                                        bg=theme_value("embed_bg"), highlightthickness=0)
-            self.indicator_circle = self.indicator.create_oval(
-                2, 2, 16, 16, fill=_USB_ROW_WHITE, outline="#cfd7e3", width=2)
-            self.indicator.pack(side="left", padx=(0, 10), pady=(2, 0))
+    ctk.CTkLabel(config_row, text="Ethernet:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=4, padx=(0, 5))
+    eth_count_var = ctk.StringVar(value="1")
+    ctk.CTkEntry(config_row, textvariable=eth_count_var, width=50, height=28).grid(row=0, column=5, padx=(0, 15))
 
-            text_col = tk.Frame(self.frame, bg=theme_value("embed_bg"))
-            text_col.pack(side="left", fill="x", expand=True)
+    ctk.CTkLabel(config_row, text="Audio:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=6, padx=(0, 5))
+    audio_count_var = ctk.StringVar(value="1")
+    ctk.CTkEntry(config_row, textvariable=audio_count_var, width=50, height=28, state="disabled").grid(row=0, column=7)
 
-            self.title_label = tk.Label(
-                text_col, text=title, bg=theme_value("embed_bg"),
-                fg=theme_value("embed_text"), font=("Segoe UI", 11, "bold"), anchor="w")
-            self.title_label.pack(anchor="w")
+    # Control buttons
+    btn_row = ctk.CTkFrame(usb_config_frame, fg_color="transparent")
+    btn_row.pack(fill="x", padx=12, pady=(0, 10))
 
-            self.state_label = tk.Label(
-                text_col, text=note, bg=theme_value("embed_bg"),
-                fg="#9fb3c8", font=("Segoe UI", 9), anchor="w")
-            self.state_label.pack(anchor="w")
+    usb_start_btn = ctk.CTkButton(
+        btn_row,
+        text="Start Testing",
+        width=120,
+        height=32,
+        fg_color="#2ecc71",
+        hover_color="#3ae083",
+        command=_start_port_testing
+    )
+    usb_start_btn.pack(side="left", padx=(0, 8))
 
-            self.details_label = tk.Label(
-                text_col, text="", bg=theme_value("embed_bg"), fg="#9fb3c8",
-                font=("Consolas", 8), justify="left", anchor="w", wraplength=300)
-            self.details_label.pack(anchor="w", pady=(2, 0))
+    # Port list display frame (Screen 2 - initially hidden)
+    usb_ports_frame = _register_ctk_frame(ctk.CTkScrollableFrame(usb_card, fg_color=theme_value("embed_bg"), corner_radius=8))
+    # Don't pack initially - will show when testing starts
 
-            _register_tk_frame(self.frame)
-            _register_tk_frame(text_col)
-            _register_subtle_label(self.state_label)
-            _register_subtle_label(self.details_label)
+    # Port list control buttons (Screen 2 - initially hidden)
+    usb_ports_btn_frame = ctk.CTkFrame(usb_card, fg_color="transparent")
+    # Don't pack initially
 
-        def set_state(self, connected, summary, details):
-            fill = _USB_ROW_GREEN if connected else _USB_ROW_WHITE
-            outline = _USB_ROW_GREEN if connected else "#cfd7e3"
-            try:
-                self.indicator.itemconfigure(self.indicator_circle, fill=fill, outline=outline)
-                self.state_label.configure(fg=_USB_ROW_GREEN if connected else "#9fb3c8", text=summary)
-                self.details_label.configure(text=details)
-            except Exception:
-                pass
+    usb_pass_btn = ctk.CTkButton(
+        usb_ports_btn_frame,
+        text="Mark Passed",
+        width=120,
+        height=32,
+        fg_color="#2ecc71",
+        hover_color="#3ae083",
+        state="disabled",
+        command=_mark_port_passed
+    )
+    usb_pass_btn.pack(side="left", padx=14, pady=(0, 10))
 
-        def set_error(self, message):
-            try:
-                self.indicator.itemconfigure(self.indicator_circle, fill=_USB_ROW_WHITE, outline="#cfd7e3")
-                self.state_label.configure(fg=_USB_ROW_RED, text="Unable to read status")
-                self.details_label.configure(text=f"- {message}")
-            except Exception:
-                pass
+    usb_skip_btn = ctk.CTkButton(
+        usb_ports_btn_frame,
+        text="Skip Port",
+        width=100,
+        height=32,
+        fg_color="#9fb3c8",
+        hover_color="#b0c0d8",
+        state="disabled",
+        command=_skip_port
+    )
+    usb_skip_btn.pack(side="left", padx=(0, 14), pady=(0, 10))
 
-    usb_port_rows = {
-        "USB": _UsbCardPortRow(usb_info_frame, "USB", "External USB device"),
-        "HDMI": _UsbCardPortRow(usb_info_frame, "HDMI", "Active display connection"),
-        "Ethernet": _UsbCardPortRow(usb_info_frame, "Ethernet", "Physical network link"),
-        "Audio Jack": _UsbCardPortRow(usb_info_frame, "Audio Jack", "Wired audio endpoint"),
-    }
-    # Small bottom padding under the last row
-    try:
-        usb_port_rows["Audio Jack"].frame.pack_configure(pady=(8, 10))
-    except Exception:
-        pass
+    # Port check state variables
+    _portcheck_config = {"usb": 2, "usbc": 2, "ethernet": 1, "audiojack": 1}
+    _portcheck_running = [False]
+    _portcheck_current_port = [None]
+    _portcheck_current_index = [0]
+    _portcheck_current_list = [[]]
+    _portcheck_results = {}
+    _portcheck_rows = {}
+    _usb_drive_count = [0]
 
-    # USB port detection variables
-    _usb_check_running = [False]
+    # Detection functions
+    def _get_usb_drive_letters():
+        drive_mask = ctypes.windll.kernel32.GetLogicalDrives()
+        drive_letters = []
+        for index in range(26):
+            if not (drive_mask & (1 << index)):
+                continue
+            letter = f"{chr(65 + index)}:\\"
+            drive_type = ctypes.windll.kernel32.GetDriveTypeW(ctypes.c_wchar_p(letter))
+            if drive_type == 2:
+                drive_letters.append(letter)
+        return drive_letters
 
-    def _usbport_refresh():
-        """Detect USB / HDMI / Ethernet / Audio Jack using portcheck2.py's
-        detection functions and update the embedded port-monitor rows."""
-        if _usb_check_running[0]:
-            return
-        _usb_check_running[0] = True
+    def _detect_usb():
+        drives = _get_usb_drive_letters()
+        current_count = len(drives)
+        
+        if current_count > _usb_drive_count[0]:
+            _usb_drive_count[0] = current_count
+            return True, f"Removable USB storage detected ({len(drives)})", "\n".join(f"- {drive}" for drive in drives)
+        
+        if current_count < _usb_drive_count[0]:
+            _usb_drive_count[0] = current_count
+        
+        return False, "No removable USB storage detected", "- No removable drive letters are currently present"
 
+    def _detect_ethernet():
         try:
-            ui_call(lambda: usb_status.configure(text="Checking ports...", text_color="#58a6ff"))
+            import psutil
+            matches = []
+            for name, stats in psutil.net_if_stats().items():
+                if not stats.isup:
+                    continue
+                lowered = name.lower()
+                if "ethernet" in lowered or "eth" in lowered or "802.3" in lowered:
+                    matches.append(name)
+            if matches:
+                return True, f"Ethernet link is up ({len(matches)})", "\n".join(f"- {m}" for m in matches[:5])
+            return False, "No active ethernet link detected", "- Based on local interface stats"
+        except Exception as exc:
+            return False, "Unable to read Ethernet status", f"- {exc}"
 
-            if portcheck2 is None:
-                ui_call(lambda: usb_status.configure(text="portcheck2.py not found!", text_color="#ff7b72"))
-                return
+    # Audio detection COM interface definitions
+    VT_LPWSTR = 31
+    CLSCTX_INPROC_SERVER = 0x1
+    STGM_READ = 0x0
+    EDataFlow_RENDER = 0
+    ERole_CONSOLE = 0
 
-            try:
-                usb_connected, usb_summary, usb_details = portcheck2.detect_usb()
-            except Exception as exc:
-                usb_connected, usb_summary, usb_details = False, "Unable to read status", str(exc)
-            try:
-                hdmi_connected, hdmi_summary, hdmi_details = portcheck2.detect_hdmi()
-            except Exception as exc:
-                hdmi_connected, hdmi_summary, hdmi_details = False, "Unable to read status", str(exc)
-            try:
-                eth_connected, eth_summary, eth_details = portcheck2.detect_ethernet()
-            except Exception as exc:
-                eth_connected, eth_summary, eth_details = False, "Unable to read status", str(exc)
-            try:
-                audio_connected, audio_summary, audio_details = portcheck2.detect_audio_jack()
-            except Exception as exc:
-                audio_connected, audio_summary, audio_details = False, "Unable to read status", str(exc)
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", ctypes.c_uint32),
+            ("Data2", ctypes.c_uint16),
+            ("Data3", ctypes.c_uint16),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
 
-            # Update UI
-            def _update_ui():
-                usb_port_rows["USB"].set_state(usb_connected, usb_summary, usb_details)
-                usb_port_rows["HDMI"].set_state(hdmi_connected, hdmi_summary, hdmi_details)
-                usb_port_rows["Ethernet"].set_state(eth_connected, eth_summary, eth_details)
-                usb_port_rows["Audio Jack"].set_state(audio_connected, audio_summary, audio_details)
+    def _guid(value):
+        return GUID.from_buffer_copy(uuid.UUID(value).bytes_le)
 
-                usb_status.configure(
-                    text=f"USB Test: {'PASS' if usb_connected else 'FAIL'} - {usb_summary}",
-                    text_color="#7ee787" if usb_connected else "#ff7b72"
-                )
+    CLSID_MMDeviceEnumerator = _guid("BCDE0395-E52F-467C-8E3D-C4579291692E")
+    IID_IMMDeviceEnumerator = _guid("A95664D2-9614-4F35-A746-DE8DB63617E6")
+    IID_IMMDevice = _guid("D666063F-1587-4E43-81F1-B948E807363F")
+    IID_IPropertyStore = _guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")
+    PKEY_Device_FriendlyName = (GUID.from_buffer_copy(uuid.UUID("A45C254E-DF1C-4EFD-8020-67D146A850E0").bytes_le), 14)
 
-                # Auto-mark pass/fail based on USB storage detection (the
-                # card's primary purpose); HDMI/Ethernet/Audio Jack are
-                # shown for reference but don't drive the pass/fail state.
-                if usb_connected:
-                    if hasattr(usb_card, 'set_pass'):
-                        usb_card.set_pass()
-                else:
-                    if hasattr(usb_card, 'set_fail'):
-                        usb_card.set_fail()
+    class PROPERTYKEY(ctypes.Structure):
+        _fields_ = [("fmtid", GUID), ("pid", ctypes.c_uint32)]
 
-            ui_call(_update_ui)
+    class PROPVARIANT_UNION(ctypes.Union):
+        _fields_ = [
+            ("pwszVal", ctypes.c_void_p),
+            ("punkVal", ctypes.c_void_p),
+            ("bstrVal", ctypes.c_void_p),
+            ("llVal", ctypes.c_longlong),
+            ("ullVal", ctypes.c_ulonglong),
+            ("intVal", ctypes.c_int),
+            ("uintVal", ctypes.c_uint),
+        ]
 
-        except Exception as e:
-            ui_call(lambda: usb_status.configure(text=f"Error: {str(e)}", text_color="#ff7b72"))
+    class PROPVARIANT(ctypes.Structure):
+        _anonymous_ = ("value",)
+        _fields_ = [
+            ("vt", ctypes.c_ushort),
+            ("wReserved1", ctypes.c_ushort),
+            ("wReserved2", ctypes.c_ushort),
+            ("wReserved3", ctypes.c_ushort),
+            ("value", PROPVARIANT_UNION),
+        ]
+
+    def _read_default_audio_output_name():
+        ole32 = ctypes.windll.ole32
+        ole32.CoInitialize(None)
+        enumerator = None
+        device = None
+        store = None
+        prop = PROPVARIANT()
+        try:
+            enumerator_ptr = ctypes.c_void_p()
+            hr = ole32.CoCreateInstance(
+                ctypes.byref(CLSID_MMDeviceEnumerator),
+                None,
+                CLSCTX_INPROC_SERVER,
+                ctypes.byref(IID_IMMDeviceEnumerator),
+                ctypes.byref(enumerator_ptr),
+            )
+            if hr != 0:
+                raise OSError(hr)
+
+            class IMMDeviceEnumerator(ctypes.Structure):
+                pass
+
+            class IMMDevice(ctypes.Structure):
+                pass
+
+            class IPropertyStore(ctypes.Structure):
+                pass
+
+            QueryInterfaceProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))
+            AddRefProto = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)
+            ReleaseProto = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)
+            GetDefaultAudioEndpointProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))
+            OpenPropertyStoreProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p))
+            GetValueProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(PROPERTYKEY), ctypes.POINTER(PROPVARIANT))
+
+            class IMMDeviceEnumeratorVtbl(ctypes.Structure):
+                _fields_ = [
+                    ("QueryInterface", QueryInterfaceProto),
+                    ("AddRef", AddRefProto),
+                    ("Release", ReleaseProto),
+                    ("EnumAudioEndpoints", ctypes.c_void_p),
+                    ("GetDefaultAudioEndpoint", GetDefaultAudioEndpointProto),
+                    ("GetDevice", ctypes.c_void_p),
+                    ("RegisterEndpointNotificationCallback", ctypes.c_void_p),
+                    ("UnregisterEndpointNotificationCallback", ctypes.c_void_p),
+                ]
+
+            class IMMDeviceVtbl(ctypes.Structure):
+                _fields_ = [
+                    ("QueryInterface", QueryInterfaceProto),
+                    ("AddRef", AddRefProto),
+                    ("Release", ReleaseProto),
+                    ("Activate", ctypes.c_void_p),
+                    ("OpenPropertyStore", OpenPropertyStoreProto),
+                    ("GetId", ctypes.c_void_p),
+                    ("GetState", ctypes.c_void_p),
+                ]
+
+            class IPropertyStoreVtbl(ctypes.Structure):
+                _fields_ = [
+                    ("QueryInterface", QueryInterfaceProto),
+                    ("AddRef", AddRefProto),
+                    ("Release", ReleaseProto),
+                    ("GetCount", ctypes.c_void_p),
+                    ("GetAt", ctypes.c_void_p),
+                    ("GetValue", GetValueProto),
+                    ("SetValue", ctypes.c_void_p),
+                    ("Commit", ctypes.c_void_p),
+                ]
+
+            IMMDeviceEnumerator._fields_ = [("lpVtbl", ctypes.POINTER(IMMDeviceEnumeratorVtbl))]
+            IMMDevice._fields_ = [("lpVtbl", ctypes.POINTER(IMMDeviceVtbl))]
+            IPropertyStore._fields_ = [("lpVtbl", ctypes.POINTER(IPropertyStoreVtbl))]
+
+            enumerator = ctypes.cast(enumerator_ptr, ctypes.POINTER(IMMDeviceEnumerator))
+            device_ptr = ctypes.c_void_p()
+            hr = enumerator.contents.lpVtbl.contents.GetDefaultAudioEndpoint(
+                enumerator,
+                EDataFlow_RENDER,
+                ERole_CONSOLE,
+                ctypes.byref(device_ptr),
+            )
+            if hr != 0:
+                raise OSError(hr)
+
+            device = ctypes.cast(device_ptr, ctypes.POINTER(IMMDevice))
+            store_ptr = ctypes.c_void_p()
+            hr = device.contents.lpVtbl.contents.OpenPropertyStore(device, STGM_READ, ctypes.byref(store_ptr))
+            if hr != 0:
+                raise OSError(hr)
+
+            store = ctypes.cast(store_ptr, ctypes.POINTER(IPropertyStore))
+            hr = store.contents.lpVtbl.contents.GetValue(store, ctypes.byref(PROPERTYKEY(*PKEY_Device_FriendlyName)), ctypes.byref(prop))
+            if hr != 0:
+                raise OSError(hr)
+
+            if prop.vt != VT_LPWSTR or not prop.pwszVal:
+                return ""
+            return ctypes.wstring_at(prop.pwszVal)
         finally:
-            _usb_check_running[0] = False
+            try:
+                ctypes.windll.ole32.PropVariantClear(ctypes.byref(prop))
+            except Exception:
+                pass
+            try:
+                if store is not None:
+                    store.contents.lpVtbl.contents.Release(store)
+            except Exception:
+                pass
+            try:
+                if device is not None:
+                    device.contents.lpVtbl.contents.Release(device)
+            except Exception:
+                pass
+            try:
+                if enumerator is not None:
+                    enumerator.contents.lpVtbl.contents.Release(enumerator)
+            except Exception:
+                pass
+            try:
+                ole32.CoUninitialize()
+            except Exception:
+                pass
 
-    # AUTO ADVANCE: USB Port Detection -> NFC
+    def _detect_audio_jack():
+        try:
+            name = _read_default_audio_output_name()
+            if not name:
+                return False, "No default audio output detected", "- Windows has no active default playback device"
+            lowered = name.lower()
+
+            if any(token in lowered for token in ("headphone", "headset", "earphone", "line out", "line-out")):
+                return True, "Headphones are the active output", f"- Default output device: {name}"
+
+            return False, "Speakers are still the active output", f"- Default output device: {name}"
+        except Exception as exc:
+            return False, "Unable to read audio status", f"- {exc}"
+
+    def _create_port_row(port_name, port_type):
+        """Create a UI row for a port"""
+        try:
+            row_frame = ctk.CTkFrame(usb_ports_frame, fg_color="transparent")
+            row_frame.pack(fill="x", pady=4)
+            
+            # Port name label
+            title = ctk.CTkLabel(row_frame, text=port_name, font=ctk.CTkFont(size=12, weight="bold"), text_color="black")
+            title.pack(anchor="w")
+            
+            # Status label
+            status = ctk.CTkLabel(row_frame, text=f"{port_type} - Waiting", font=ctk.CTkFont(size=10), text_color="#666666")
+            status.pack(anchor="w")
+            
+            _portcheck_rows[port_name] = {
+                "title": title,
+                "status": status
+            }
+            _portcheck_results[port_name] = "pending"
+        except Exception as e:
+            usb_status.configure(text=f"Error creating row for {port_name}: {str(e)}", text_color="#ff7b72")
+
+    def _update_port_row(port_name, state, status_text, details_text):
+        """Update port row display"""
+        if port_name not in _portcheck_rows:
+            return
+        
+        row = _portcheck_rows[port_name]
+        
+        if state == "testing":
+            row["status"].configure(text=status_text, text_color="#5dc7ff")
+        elif state == "passed":
+            row["status"].configure(text=status_text, text_color="#2ecc71")
+        elif state == "skipped":
+            row["status"].configure(text=status_text, text_color="#ff6b6b")
+        else:
+            row["status"].configure(text=status_text, text_color="#666666")
+
+    def _start_port_testing():
+        """Start sequential port testing"""
+        if _portcheck_running[0]:
+            return
+        
+        try:
+            _portcheck_config["usb"] = int(usb_count_var.get())
+            _portcheck_config["usbc"] = int(usbc_count_var.get())
+            _portcheck_config["ethernet"] = int(eth_count_var.get())
+            _portcheck_config["audiojack"] = 1
+        except:
+            usb_status.configure(text="Invalid configuration values", text_color="#ff7b72")
+            return
+        
+        drives = _get_usb_drive_letters()
+        _usb_drive_count[0] = len(drives)
+        
+        # Switch to screen 2: Hide config, show ports
+        usb_config_frame.pack_forget()
+        usb_ports_frame.pack(fill="x", padx=14, pady=(0, 10))
+        usb_ports_btn_frame.pack(fill="x")
+        
+        # Clear existing rows and create new ones
+        for widget in usb_ports_frame.winfo_children():
+            widget.destroy()
+        _portcheck_rows.clear()
+        _portcheck_results.clear()
+        
+        # Test: Add a simple label first
+        test_label = ctk.CTkLabel(usb_ports_frame, text="Test - Creating ports...", text_color="#9fb3c8")
+        test_label.pack(pady=10)
+        
+        for i in range(_portcheck_config["usb"]):
+            _create_port_row(f"USB {i+1}", "USB-A port")
+        for i in range(_portcheck_config["usbc"]):
+            _create_port_row(f"USB-C {i+1}", "USB-C port")
+        for i in range(_portcheck_config["ethernet"]):
+            _create_port_row(f"Ethernet {i+1}", "Ethernet port")
+        _create_port_row(f"Audio Jack 1", "Audio jack port")
+        
+        usb_status.configure(text=f"Created {len(_portcheck_rows)} port rows", text_color="#58a6ff")
+        
+        _portcheck_running[0] = True
+        port_list = list(_portcheck_rows.keys())
+        if port_list:
+            _test_next_port(port_list, 0)
+        else:
+            usb_status.configure(text="No ports configured for testing.", text_color="#ff7b72")
+
+    def _test_next_port(port_list, index):
+        """Test the next port in sequence"""
+        if index >= len(port_list):
+            _portcheck_testing_complete()
+            return
+        
+        port_name = port_list[index]
+        _portcheck_current_port[0] = port_name
+        _portcheck_current_index[0] = index
+        _portcheck_current_list[0] = port_list
+        
+        _update_port_row(port_name, "testing", "TESTING - Plug device here", "Waiting for device insertion...")
+        usb_status.configure(text=f"Testing {port_name}: Please plug a device into this port.", text_color="#58a6ff")
+        usb_pass_btn.configure(state="normal")
+        usb_skip_btn.configure(state="normal")
+        
+        threading.Thread(target=_poll_for_device, args=(port_name, port_list, index), daemon=True).start()
+
+    def _poll_for_device(port_name, port_list, index):
+        """Poll for device detection"""
+        if _portcheck_current_port[0] != port_name or not _portcheck_running[0]:
+            return
+        
+        try:
+            detected = False
+            if "Ethernet" in port_name:
+                detected, _, _ = _detect_ethernet()
+            elif "Audio Jack" in port_name:
+                detected, _, _ = _detect_audio_jack()
+            elif "USB" in port_name:
+                detected, _, _ = _detect_usb()
+            
+            if detected:
+                _mark_port_passed()
+            else:
+                threading.Thread(target=_poll_for_device, args=(port_name, port_list, index), daemon=True).start()
+        except Exception:
+            threading.Thread(target=_poll_for_device, args=(port_name, port_list, index), daemon=True).start()
+
+    def _mark_port_passed():
+        """Mark current port as passed"""
+        if not _portcheck_current_port[0]:
+            return
+        
+        port_name = _portcheck_current_port[0]
+        _portcheck_results[port_name] = "passed"
+        _update_port_row(port_name, "passed", "PASSED", "Device detected successfully")
+        usb_pass_btn.configure(state="disabled")
+        usb_skip_btn.configure(state="disabled")
+        
+        def _delay_next():
+            _test_next_port(_portcheck_current_list[0], _portcheck_current_index[0] + 1)
+        threading.Timer(1.0, _delay_next).start()
+
+    def _skip_port():
+        """Skip current port"""
+        if not _portcheck_current_port[0]:
+            return
+        
+        port_name = _portcheck_current_port[0]
+        _portcheck_results[port_name] = "skipped"
+        _update_port_row(port_name, "skipped", "SKIPPED", "Port skipped by operator")
+        usb_pass_btn.configure(state="disabled")
+        usb_skip_btn.configure(state="disabled")
+        
+        def _delay_next():
+            _test_next_port(_portcheck_current_list[0], _portcheck_current_index[0] + 1)
+        threading.Timer(0.5, _delay_next).start()
+
+    def _portcheck_testing_complete():
+        """Handle testing completion"""
+        _portcheck_current_port[0] = None
+        _portcheck_running[0] = False
+        usb_pass_btn.configure(state="disabled")
+        usb_skip_btn.configure(state="disabled")
+        
+        passed = sum(1 for v in _portcheck_results.values() if v == "passed")
+        total = len(_portcheck_results)
+        usb_status.configure(text=f"Testing complete: {passed}/{total} ports passed", text_color="#7ee787")
+
+    def _reset_to_config():
+        """Reset back to configuration screen"""
+        _portcheck_running[0] = False
+        _portcheck_current_port[0] = None
+        _portcheck_rows.clear()
+        _portcheck_results.clear()
+        
+        # Switch back to screen 1: Hide ports, show config
+        usb_ports_frame.pack_forget()
+        usb_ports_btn_frame.pack_forget()
+        usb_config_frame.pack(fill="x", padx=14, pady=(0, 10))
+        usb_status.configure(text="Configure ports and click 'Start Testing'", text_color="#9fb3c8")
+        usb_pass_btn.configure(state="disabled")
+        usb_skip_btn.configure(state="disabled")
+
+    # Update refresh button to reset to config
+    usb_header_row.winfo_children()[-1].configure(command=_reset_to_config)
+
+    # AUTO ADVANCE: Port Check -> NFC
     def _on_usb_marked():
-        """After USB Port Detection PASS/FAIL, show NFC card and start NFC test."""
+        """After Port Check PASS/FAIL, show NFC card and start NFC test."""
 
         def _show_and_start_nfc():
             try:
@@ -7110,7 +7577,6 @@ def show_hardware_test_screen():
 
     try:
         usb_card.pack(fill="x", padx=14, pady=8)
-        _apply_relative_card_width(usb_card, 0.667)
     except Exception:
         pass
 
@@ -8285,7 +8751,7 @@ catch {
     add_sidebar_item("mic", "🎙️ Microphone", mic_card)
     add_sidebar_item("br", "☀️ Brightness", brightness_card)
     add_sidebar_item("smartcard", "💳 Smart Card", smartcard_card)
-    add_sidebar_item("usb", "🔌 USB Port Detection", usb_card)
+    add_sidebar_item("usb", "🔌 Port Check", usb_card)
     add_sidebar_item("nfc", "📡 NFC Reader", nfc_card)
     add_sidebar_item("fingerprint", "👆 Fingerprint", fingerprint_card)
     add_sidebar_item("ts", "👆 Touchscreen", touchscreen_card)
