@@ -100,11 +100,11 @@ Memory
 
 ==============
 
-Name: Hynix/Hyundai HMAA4GS6MJR8N-VK    
+Name: Samsung M471A4G43BB1-CWE    
 
 Size: 32 GB
 
-Name: Hynix/Hyundai HMAA4GS6AJR8N-XN    
+Name: Samsung M471A4G43BB1-CWE    
 
 Size: 32 GB
 

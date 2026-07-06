@@ -1,12 +1,12 @@
 ﻿**********************
 Windows PowerShell transcript start
-Start time: 20260702160325
+Start time: 20260706121737
 Username: WINDOWS-TS2\Anthony
 RunAs User: WINDOWS-TS2\Anthony
 Configuration Name: 
 Machine: WINDOWS-TS2 (Microsoft Windows NT 10.0.26200.0)
-Host Application: powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\HPLENDELLDEV7.ps1
-Process ID: 32604
+Host Application: powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\HPLENDELLDEV7.ps1
+Process ID: 28604
 PSVersion: 5.1.26100.8737
 PSEdition: Desktop
 PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8737
@@ -41,14 +41,14 @@ Serial: 3CM4140KLJ
 Manufacture Year: 2024
 
 Manufacturer: HPN
-Name: HP 27h
-Serial: 3CM23403CH
-Manufacture Year: 2022
-
-Manufacturer: HPN
 Name: OMEN 27k
 Serial: CNC3152CGF
 Manufacture Year: 2023
+
+Manufacturer: HPN
+Name: HP 27h
+Serial: 3CM23403CH
+Manufacture Year: 2022
 
 =============
 
@@ -67,9 +67,9 @@ Size: 2 TB
 
 Memory
 ==============
-Name: Hynix/Hyundai HMAA4GS6MJR8N-VK
+Name: Samsung M471A4G43BB1-CWE
 Size: 32 GB
-Name: Hynix/Hyundai HMAA4GS6AJR8N-XN
+Name: Samsung M471A4G43BB1-CWE
 Size: 32 GB
 =============
 
@@ -106,8 +106,8 @@ WWAN         No   No
 Fingerprint  No   No
 WLAN         Yes  Yes
 Touchscreen  No   No
-Camera       No   No
-Microphone   Yes  No
+Camera       No   Yes
+Microphone   Yes  Yes
 NFC          No   No
 Smart Card   No   No
 KB Backlight No   No
@@ -124,5 +124,5 @@ BCU stdout file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 
 BCU stderr file: C:\Users\Anthony\OneDrive - Close The Loop Inc\ALL BAT AND PS1 FILES - Copy\bcu-stderr.txt
 **********************
 Windows PowerShell transcript end
-End time: 20260702160334
+End time: 20260706121744
 **********************
