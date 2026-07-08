@@ -6027,19 +6027,23 @@ def show_hardware_test_screen():
     config_row = ctk.CTkFrame(usb_config_frame, fg_color="transparent")
     config_row.pack(fill="x", padx=12, pady=10)
 
-    ctk.CTkLabel(config_row, text="USB:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=0, padx=(0, 5))
+    ctk.CTkLabel(config_row, text="USB:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=0,
+                                                                                                padx=(0, 5))
     usb_count_var = ctk.StringVar(value="2")
     ctk.CTkEntry(config_row, textvariable=usb_count_var, width=50, height=28).grid(row=0, column=1, padx=(0, 15))
 
-    ctk.CTkLabel(config_row, text="USB-C:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=2, padx=(0, 5))
+    ctk.CTkLabel(config_row, text="USB-C:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=2,
+                                                                                                  padx=(0, 5))
     usbc_count_var = ctk.StringVar(value="2")
     ctk.CTkEntry(config_row, textvariable=usbc_count_var, width=50, height=28).grid(row=0, column=3, padx=(0, 15))
 
-    ctk.CTkLabel(config_row, text="Ethernet:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=4, padx=(0, 5))
+    ctk.CTkLabel(config_row, text="Ethernet:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=4,
+                                                                                                     padx=(0, 5))
     eth_count_var = ctk.StringVar(value="1")
     ctk.CTkEntry(config_row, textvariable=eth_count_var, width=50, height=28).grid(row=0, column=5, padx=(0, 15))
 
-    ctk.CTkLabel(config_row, text="Audio:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=6, padx=(0, 5))
+    ctk.CTkLabel(config_row, text="Audio:", font=ctk.CTkFont(size=11), text_color="#9fb3c8").grid(row=0, column=6,
+                                                                                                  padx=(0, 5))
     audio_count_var = ctk.StringVar(value="1")
     ctk.CTkEntry(config_row, textvariable=audio_count_var, width=50, height=28, state="disabled").grid(row=0, column=7)
 
@@ -6059,7 +6063,8 @@ def show_hardware_test_screen():
     usb_start_btn.pack(side="left", padx=(0, 8))
 
     # Port list display frame (Screen 2 - initially hidden)
-    usb_ports_frame = _register_ctk_frame(ctk.CTkScrollableFrame(usb_card, fg_color=theme_value("embed_bg"), corner_radius=8))
+    usb_ports_frame = _register_ctk_frame(
+        ctk.CTkScrollableFrame(usb_card, fg_color=theme_value("embed_bg"), corner_radius=8))
     # Don't pack initially - will show when testing starts
 
     # Port list control buttons (Screen 2 - initially hidden)
@@ -6116,14 +6121,14 @@ def show_hardware_test_screen():
     def _detect_usb():
         drives = _get_usb_drive_letters()
         current_count = len(drives)
-        
+
         if current_count > _usb_drive_count[0]:
             _usb_drive_count[0] = current_count
             return True, f"Removable USB storage detected ({len(drives)})", "\n".join(f"- {drive}" for drive in drives)
-        
+
         if current_count < _usb_drive_count[0]:
             _usb_drive_count[0] = current_count
-        
+
         return False, "No removable USB storage detected", "- No removable drive letters are currently present"
 
     def _detect_ethernet():
@@ -6218,12 +6223,16 @@ def show_hardware_test_screen():
             class IPropertyStore(ctypes.Structure):
                 pass
 
-            QueryInterfaceProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))
+            QueryInterfaceProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(GUID),
+                                                     ctypes.POINTER(ctypes.c_void_p))
             AddRefProto = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)
             ReleaseProto = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)
-            GetDefaultAudioEndpointProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))
-            OpenPropertyStoreProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p))
-            GetValueProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(PROPERTYKEY), ctypes.POINTER(PROPVARIANT))
+            GetDefaultAudioEndpointProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_int,
+                                                              ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))
+            OpenPropertyStoreProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_uint32,
+                                                        ctypes.POINTER(ctypes.c_void_p))
+            GetValueProto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(PROPERTYKEY),
+                                               ctypes.POINTER(PROPVARIANT))
 
             class IMMDeviceEnumeratorVtbl(ctypes.Structure):
                 _fields_ = [
@@ -6282,7 +6291,8 @@ def show_hardware_test_screen():
                 raise OSError(hr)
 
             store = ctypes.cast(store_ptr, ctypes.POINTER(IPropertyStore))
-            hr = store.contents.lpVtbl.contents.GetValue(store, ctypes.byref(PROPERTYKEY(*PKEY_Device_FriendlyName)), ctypes.byref(prop))
+            hr = store.contents.lpVtbl.contents.GetValue(store, ctypes.byref(PROPERTYKEY(*PKEY_Device_FriendlyName)),
+                                                         ctypes.byref(prop))
             if hr != 0:
                 raise OSError(hr)
 
@@ -6333,15 +6343,17 @@ def show_hardware_test_screen():
         try:
             row_frame = ctk.CTkFrame(usb_ports_frame, fg_color="transparent")
             row_frame.pack(fill="x", pady=4)
-            
+
             # Port name label
-            title = ctk.CTkLabel(row_frame, text=port_name, font=ctk.CTkFont(size=12, weight="bold"), text_color="black")
+            title = ctk.CTkLabel(row_frame, text=port_name, font=ctk.CTkFont(size=12, weight="bold"),
+                                 text_color="black")
             title.pack(anchor="w")
-            
+
             # Status label
-            status = ctk.CTkLabel(row_frame, text=f"{port_type} - Waiting", font=ctk.CTkFont(size=10), text_color="#666666")
+            status = ctk.CTkLabel(row_frame, text=f"{port_type} - Waiting", font=ctk.CTkFont(size=10),
+                                  text_color="#666666")
             status.pack(anchor="w")
-            
+
             _portcheck_rows[port_name] = {
                 "title": title,
                 "status": status
@@ -6354,9 +6366,9 @@ def show_hardware_test_screen():
         """Update port row display"""
         if port_name not in _portcheck_rows:
             return
-        
+
         row = _portcheck_rows[port_name]
-        
+
         if state == "testing":
             row["status"].configure(text=status_text, text_color="#5dc7ff")
         elif state == "passed":
@@ -6370,7 +6382,7 @@ def show_hardware_test_screen():
         """Start sequential port testing"""
         if _portcheck_running[0]:
             return
-        
+
         try:
             _portcheck_config["usb"] = int(usb_count_var.get())
             _portcheck_config["usbc"] = int(usbc_count_var.get())
@@ -6379,35 +6391,35 @@ def show_hardware_test_screen():
         except:
             usb_status.configure(text="Invalid configuration values", text_color="#ff7b72")
             return
-        
+
         drives = _get_usb_drive_letters()
         _usb_drive_count[0] = len(drives)
-        
+
         # Switch to screen 2: Hide config, show ports
         usb_config_frame.pack_forget()
         usb_ports_frame.pack(fill="x", padx=14, pady=(0, 10))
         usb_ports_btn_frame.pack(fill="x")
-        
+
         # Clear existing rows and create new ones
         for widget in usb_ports_frame.winfo_children():
             widget.destroy()
         _portcheck_rows.clear()
         _portcheck_results.clear()
-        
+
         # Test: Add a simple label first
         test_label = ctk.CTkLabel(usb_ports_frame, text="Test - Creating ports...", text_color="#9fb3c8")
         test_label.pack(pady=10)
-        
+
         for i in range(_portcheck_config["usb"]):
-            _create_port_row(f"USB {i+1}", "USB-A port")
+            _create_port_row(f"USB {i + 1}", "USB-A port")
         for i in range(_portcheck_config["usbc"]):
-            _create_port_row(f"USB-C {i+1}", "USB-C port")
+            _create_port_row(f"USB-C {i + 1}", "USB-C port")
         for i in range(_portcheck_config["ethernet"]):
-            _create_port_row(f"Ethernet {i+1}", "Ethernet port")
+            _create_port_row(f"Ethernet {i + 1}", "Ethernet port")
         _create_port_row(f"Audio Jack 1", "Audio jack port")
-        
+
         usb_status.configure(text=f"Created {len(_portcheck_rows)} port rows", text_color="#58a6ff")
-        
+
         _portcheck_running[0] = True
         port_list = list(_portcheck_rows.keys())
         if port_list:
@@ -6420,24 +6432,24 @@ def show_hardware_test_screen():
         if index >= len(port_list):
             _portcheck_testing_complete()
             return
-        
+
         port_name = port_list[index]
         _portcheck_current_port[0] = port_name
         _portcheck_current_index[0] = index
         _portcheck_current_list[0] = port_list
-        
+
         _update_port_row(port_name, "testing", "TESTING - Plug device here", "Waiting for device insertion...")
         usb_status.configure(text=f"Testing {port_name}: Please plug a device into this port.", text_color="#58a6ff")
         usb_pass_btn.configure(state="normal")
         usb_skip_btn.configure(state="normal")
-        
+
         threading.Thread(target=_poll_for_device, args=(port_name, port_list, index), daemon=True).start()
 
     def _poll_for_device(port_name, port_list, index):
         """Poll for device detection"""
         if _portcheck_current_port[0] != port_name or not _portcheck_running[0]:
             return
-        
+
         try:
             detected = False
             if "Ethernet" in port_name:
@@ -6446,7 +6458,7 @@ def show_hardware_test_screen():
                 detected, _, _ = _detect_audio_jack()
             elif "USB" in port_name:
                 detected, _, _ = _detect_usb()
-            
+
             if detected:
                 _mark_port_passed()
             else:
@@ -6458,30 +6470,32 @@ def show_hardware_test_screen():
         """Mark current port as passed"""
         if not _portcheck_current_port[0]:
             return
-        
+
         port_name = _portcheck_current_port[0]
         _portcheck_results[port_name] = "passed"
         _update_port_row(port_name, "passed", "PASSED", "Device detected successfully")
         usb_pass_btn.configure(state="disabled")
         usb_skip_btn.configure(state="disabled")
-        
+
         def _delay_next():
             _test_next_port(_portcheck_current_list[0], _portcheck_current_index[0] + 1)
+
         threading.Timer(1.0, _delay_next).start()
 
     def _skip_port():
         """Skip current port"""
         if not _portcheck_current_port[0]:
             return
-        
+
         port_name = _portcheck_current_port[0]
         _portcheck_results[port_name] = "skipped"
         _update_port_row(port_name, "skipped", "SKIPPED", "Port skipped by operator")
         usb_pass_btn.configure(state="disabled")
         usb_skip_btn.configure(state="disabled")
-        
+
         def _delay_next():
             _test_next_port(_portcheck_current_list[0], _portcheck_current_index[0] + 1)
+
         threading.Timer(0.5, _delay_next).start()
 
     def _portcheck_testing_complete():
@@ -6490,7 +6504,7 @@ def show_hardware_test_screen():
         _portcheck_running[0] = False
         usb_pass_btn.configure(state="disabled")
         usb_skip_btn.configure(state="disabled")
-        
+
         passed = sum(1 for v in _portcheck_results.values() if v == "passed")
         total = len(_portcheck_results)
         usb_status.configure(text=f"Testing complete: {passed}/{total} ports passed", text_color="#7ee787")
@@ -6501,7 +6515,7 @@ def show_hardware_test_screen():
         _portcheck_current_port[0] = None
         _portcheck_rows.clear()
         _portcheck_results.clear()
-        
+
         # Switch back to screen 1: Hide ports, show config
         usb_ports_frame.pack_forget()
         usb_ports_btn_frame.pack_forget()

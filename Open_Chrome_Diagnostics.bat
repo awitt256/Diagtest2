@@ -1,0 +1,3 @@
+@echo off
+echo Opening Chrome OS Keyboard Diagnostics...
+start chrome "chrome://diagnostics/input"
