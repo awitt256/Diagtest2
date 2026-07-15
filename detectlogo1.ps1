@@ -27,8 +27,7 @@ Write-Host "   Built By Anthony Witt" -ForegroundColor DarkGray
 Write-Host ""
 
 # --- Required modules ---
-# HP.Private must be installed (with license accepted) before HPCMSL.
-$cmslModules = @('HP.Private', 'HPCMSL')
+$cmslModules = @('HPCMSL')
 $requiredModules = @('HPCMSL')
 $installedByScript = @()
 
@@ -133,7 +132,7 @@ try {
         Update-PowerShellGet
 
         Write-Host ""
-        Write-Host "Installing missing modules (accepting HP license)..." -ForegroundColor Yellow
+        Write-Host "Installing missing modules..." -ForegroundColor Yellow
         foreach ($mod in $cmslModules) {
             if (Get-Module -ListAvailable -Name $mod) { continue }
             try {

@@ -48,12 +48,12 @@ function Remove-InstalledModules {
     }
 
     # Unload modules from this session before uninstalling from disk.
-    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+    foreach ($mod in @('HPCMSL')) {
         Get-Module -Name $mod -ErrorAction SilentlyContinue | Remove-Module -Force -ErrorAction SilentlyContinue
     }
 
     $removedAny = $false
-    foreach ($mod in @('HPCMSL', 'HP.Private')) {
+    foreach ($mod in @('HPCMSL')) {
         if (-not (Get-Module -ListAvailable -Name $mod)) { continue }
         try {
             Uninstall-Module -Name $mod -AllVersions -Force -ErrorAction Stop
@@ -167,7 +167,7 @@ try {
         foreach ($mod in $requiredModules) {
             if (-not (Get-Module -ListAvailable -Name $mod)) {
                 try {
-                    Install-Module -Name $mod -Scope CurrentUser -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+                    Install-Module -Name $mod -Scope CurrentUser -Force -AllowClobber -AcceptLicense -Confirm:$false -ErrorAction Stop
                     $installedByScript += $mod
                     Write-Host "  Installed: $mod" -ForegroundColor Green
                 }
