@@ -22,6 +22,19 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     return
 }
 
+# --- Check PowerShell version ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "ERROR: This script requires PowerShell 7 or later." -ForegroundColor Red
+    Write-Host "Current version: $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)" -ForegroundColor Red
+    Write-Host "Please run the batch file (REMOVELOGO.bat) to install PowerShell 7 automatically." -ForegroundColor Yellow
+    if ($LauncherPath -and (Test-Path $LauncherPath)) {
+        Write-Host "Restarting batch file to install PowerShell 7..." -ForegroundColor Yellow
+        Start-Process cmd.exe -ArgumentList "/c `"$LauncherPath`"" -Verb RunAs
+    }
+    Read-Host "Press Enter to exit"
+    exit
+}
+
 # --- Script ---
 Write-Host ""
 Write-Host "  ==========================================" -ForegroundColor Cyan
