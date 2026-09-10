@@ -1,0 +1,2 @@
+@echo off
+PowerShell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process PowerShell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"Disable-BitLocker -MountPoint \"C:\"\"' -Verb RunAs"

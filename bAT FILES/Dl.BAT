@@ -1,0 +1,2 @@
+@echo off
+powershell -Command "Start-Process PowerShell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"Get-WinEvent -LogName \"\"Microsoft-Windows-Windows Defender/Operational\"\" | Format-Table TimeCreated, Id, Message -AutoSize\"' -Verb RunAs"
